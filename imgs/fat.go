@@ -229,6 +229,10 @@ func (self *_FAT_DirectoryIter) next() {
   // Incrementa
   self.pos+= 32
 
+  if self.pos >= len(self.data) {
+    return
+  }
+  
   // Long file names
   if self.getAttributes() == FAT_DIR_LFN {
     
