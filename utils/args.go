@@ -68,6 +68,7 @@ const OP_COPY  = 5
 /*********************/
 
 func print_usage() {
+  PrintVersion ()
   P := fmt.Println
   P("USAGE:\n")
   P("  imgcp <IMGs> [<OP>]\n")
