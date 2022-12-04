@@ -9,15 +9,16 @@
 
 Apart from copying files, **imgcp** also implements other useful operations:
 
- - **show**: The default operation. It shows basic information of the
-     input images.
- - **ls**: Similar to the UNIX *ls* command, it can be used to explore
-     the content of an image.
  - **cat**: Similar to the UNIX *cat* command, it can be used to print
      on the standard output the concatenation of several files inside
      disk images.
+ - **ls**: Similar to the UNIX *ls* command, it can be used to explore
+     the content of an image.
  - **mkdir**: To create empty directories.
-
+ - **remove**: To remove files and directories.
+ - **show**: The default operation. It shows basic information of the
+     input images.
+     
 ## Installing imgcp
 
 First get the repository:
@@ -62,7 +63,7 @@ imgcp hdd.img ls /0/DOS
 Concatenate the content of *AUTOEXEC.BAT* and *CONFIG.SYS* files
 from first partition of *hdd.img*:
 ```
-imgcp hdd.img cat /0/autoexec.bat  /0/config.sys
+imgcp hdd.img cat /0/autoexec.bat /0/config.sys
 ```
 
 In the previous hard drive image, copy *AUTOEXEC.BAT* as "AUTOCOP.BAT"
@@ -82,4 +83,9 @@ Copy the content of an old floppy image (*floppy.img*) into folder
 ```
 imgcp hdd.img mkdir /0/DISK
 imgcp A=hdd.img B=floppy.img cp B=/ A=/0/DISK
+```
+
+Remove *FOO* and *DISK* folders from previous examples:
+```
+imgcp hdd.img rm /0/disk /0/foo
 ```
