@@ -55,12 +55,13 @@ type Args struct {
 /* CONSTANTS */
 /*************/
 
-const OP_NONE  = 0
-const OP_SHOW  = 1
-const OP_LIST  = 2
-const OP_CAT   = 3
-const OP_MKDIR = 4
-const OP_COPY  = 5
+const OP_NONE   = 0
+const OP_SHOW   = 1
+const OP_LIST   = 2
+const OP_CAT    = 3
+const OP_MKDIR  = 4
+const OP_COPY   = 5
+const OP_REMOVE = 6
 
 
 /*********************/
@@ -78,7 +79,8 @@ func print_usage() {
   P("    <PATH>: <PATH_NONAME> | <NAME>=<PATH_NONAME>")
   P("    <PATH_NONNAME>: A file path separated by '/'")
   P("")
-  P("    <OP>: <OP_SHOW> | <OP_LIST> | <OP_CAT> | <OP_MKDIR> | <OP_COPY>")
+  P("    <OP>: <OP_CAT> | <OP_COPY> | <OP_LIST> | <OP_MKDIR> |"+
+    " <OP_REMOVE> | <OP_SHOW>")
   P("")
   P("    <OP_CAT> : cat <PATH> [<PATH>]*")
   P("")
@@ -87,6 +89,8 @@ func print_usage() {
   P("    <OP_LIST> : (list | ls) <PATH> [<PATH>]*")
   P("")
   P("    <OP_MKDIR> : mkdir <PATH> [<PATH>]*")
+  P("")
+  P("    <OP_REMOVE> : (remove | rm) <PATH> [<PATH>]*")
   P("")
   P("    <OP_SHOW>: show | sh")
   P("")
@@ -107,6 +111,8 @@ func print_usage() {
   P("  mkdir: Similar to the UNIX mkdir command, creates a directory for")
   P("         a provided path. All subdirectories in the path are also")
   P("         created.")
+  P("")
+  P("  remove: Remove specified files or directories.")
   P("")
   P("  show: This is the default operation. Show the information")
   P("        of the current files.")
@@ -185,8 +191,12 @@ func NewArgs() (*Args,error) {
       args.Op= OP_MKDIR
       args.OpArgs= os.Args[i+1:]
       break
-    } else if os.Args[i]=="copy" || os.Args[i]=="cp" { // Operació list
+    } else if os.Args[i]=="copy" || os.Args[i]=="cp" { // Operació copy
       args.Op= OP_COPY
+      args.OpArgs= os.Args[i+1:]
+      break
+    } else if os.Args[i]=="remove" || os.Args[i]=="rm" { // Operació remove
+      args.Op= OP_REMOVE
       args.OpArgs= os.Args[i+1:]
       break
     } else { // Filename

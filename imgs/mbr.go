@@ -479,6 +479,11 @@ func (self *_MBR_DirectoryIter) Next() error {
 } // end Next
 
 
+func (self *_MBR_DirectoryIter) Remove() error {
+  return errors.New ( "Partitions cannot be removed" )
+}
+
+
 func (self *_MBR_DirectoryIter) Type() int {
-  return DIRECTORY_ITER_TYPE_DIR
+  return DIRECTORY_ITER_TYPE_DIR_SPECIAL
 }

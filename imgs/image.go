@@ -158,6 +158,13 @@ type DirectoryIter interface {
   
   // Avança a la següent entrada
   Next() error
+
+  // Elimina el fitxer o directori. En cas dels fitxers especials dona
+  // error. ATENCIÓ!!!! Si s'intenta esborrar un directori no
+  // s'assegura que s'esborren els fitxers apuntats per aquest. És
+  // responsabilitat de l'usuari esborrar abans tots els fitxers abans
+  // d'esborrar el directori.
+  Remove() error
   
   // Retorna el tipus
   Type() int
@@ -178,6 +185,8 @@ type FindPathResult struct {
 
 // Busca el path en el directori especificat. Tornant un punter al
 // directori si ho és o a l'iterador del fitxer si és un fitxer.
+// NOTA!!! Quan és un directori FileIt conté l'iterador que apunta al
+// directori, sempre i quan no siga l'arrel
 func FindPath(
   
   dir         Directory,
@@ -187,7 +196,9 @@ func FindPath(
 ) (FindPathResult,error) {
 
   // Prepara
-  ret := FindPathResult {}
+  ret := FindPathResult {
+    FileIt: nil, // Per si és un directori
+    }
   tmp_path := path
 
   // Cerca
@@ -214,6 +225,7 @@ func FindPath(
       
     } else if i.Type () == DIRECTORY_ITER_TYPE_DIR ||
       i.Type () == DIRECTORY_ITER_TYPE_DIR_SPECIAL {
+      ret.FileIt= i
       dir,err= i.GetDirectory ()
       if err != nil { return ret,err }
       
@@ -235,10 +247,11 @@ func FindPath(
     
   }
   
-  // Si aplega ací és un directori i l'hem trobat
+  // Si aplega ací és un directori i l'hem trobat. Si no és l'arrel
+  // FileIt tindrà el punter a l'iterador.
   ret.IsDir= true
   ret.Dir= dir
-
+  
   return ret,nil
   
 } // end FindPath

@@ -50,6 +50,8 @@ func main() {
         err= ops.Mkdir ( args )
       case utils.OP_COPY:
         err= ops.Copy ( args )
+      case utils.OP_REMOVE:
+        err= ops.Remove ( args )
       default:
         err= ops.Show ( args )
       }

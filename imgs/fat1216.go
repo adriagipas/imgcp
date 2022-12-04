@@ -380,7 +380,7 @@ func (self *_FAT1216) fWriteFAT(f *os.File) (error) {
   // Obté Boot Record
   br,err := self.fGetBR ( f )
   if err != nil { return err }
-
+  
   // Escriu totes les còpies
   first_fat_sector := self.offset +
     int64(br.bpb.reserved_secs)*int64(br.bpb.bytes_per_sec)
@@ -582,6 +582,7 @@ func (self *_FAT1216_FileWriter) write_cluster(chain bool) error {
     cluster,err := self.img.fAllocCluster ( self.f )
     if err != nil { return err }
     fat.write ( self.cluster, cluster )
+    self.img.fat_modified= true
     self.cluster= cluster
     self.pos= 0
     
@@ -952,6 +953,7 @@ func (self *_FAT1216_Directory) fResize(f *os.File) error {
   fat,err := self.img.fGetFAT ( f )
   if err != nil { return err }
   fat.write ( self.last_cluster, new_c )
+  self.img.fat_modified= true
   self.last_cluster= new_c
   
   return nil
@@ -1208,6 +1210,7 @@ func (self *_FAT1216_DirectoryIter) fOverwriteFile(
     fat.write ( q, 0 ) // Allibera
   }
   fat.write ( file_cluster, fat.badCluster () + 1 ) // Últim cluster
+  self.pdir.img.fat_modified= true
 
   // Obté entry i actualitza
   pos_entry := self.it.getPosEntry ()
@@ -1461,6 +1464,63 @@ func (self *_FAT1216_DirectoryIter) Next() error {
   
 } // end Next
   
+
+func (self *_FAT1216_DirectoryIter) Remove() error {
+
+  // Comprova que és un directori o fitxer
+  typ := self.Type ()
+  if typ != DIRECTORY_ITER_TYPE_DIR && typ != DIRECTORY_ITER_TYPE_FILE {
+    return fmt.Errorf ( "File '%s' cannot be removed", self.GetName () )
+  }
+
+  // Prepara
+  img := self.pdir.img
+  
+  // Obri fitxer
+  f,err := os.OpenFile ( img.file_name, os.O_RDWR, 0666 )
+  if err != nil {
+    return fmt.Errorf ( "Unable to open for writing '%s': %s",
+      img.file_name, err )
+  }
+
+  // Llig la taula fat
+  fat,err := self.pdir.img.fGetFAT ( f )
+  if err != nil { return err }
+
+  // Obté cluster i neteja
+  file_cluster := self.it.getCluster16 ()
+  p := file_cluster
+  for ; p < fat.badCluster () && p > 1 ; {
+    q := p
+    p= fat.chain ( p )
+    fat.write ( q, 0 ) // Allibera
+  }
+  img.fat_modified= true
+
+  // Obté entry i marca com unused
+  pos_entry := self.it.getPosEntry ()
+  block_size := len(self.pdir.data)/len(self.pdir.mod)
+  block_ind := pos_entry/block_size
+  self.pdir.mod[block_ind]= true
+  file_entry := self.pdir.data[pos_entry:pos_entry+32]
+  // --> Marca com unused
+  file_entry[0]= 0xe5 // unused
+
+  // Escriu en el dsic
+  if err := self.pdir.fWrite ( f ); err != nil {
+    return err
+  }
+  if err := img.fWriteFAT ( f ); err != nil {
+    return err
+  }
+  
+  // Tanca
+  f.Close ()
+  
+  return nil
+  
+} // end Remove
+
 
 func (self *_FAT1216_DirectoryIter) Type() int {
 
