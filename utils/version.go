@@ -25,7 +25,7 @@ package utils;
 
 import "fmt"
 
-const VERSION = "0.1"
+const VERSION = "0.2"
 
 func PrintVersion() {
 
