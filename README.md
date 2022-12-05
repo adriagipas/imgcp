@@ -89,3 +89,16 @@ Remove *FOO* and *DISK* folders from previous examples:
 ```
 imgcp hdd.img rm /0/disk /0/foo
 ```
+
+Copy the content of an old floppy image (*floppy.image*) into a local
+folder */tmp/disk*:
+```
+mkdir -p /tmp/disk
+imgcp A=floppy.img B=/ cp A=/ B=/tmp/disk/
+```
+
+Copy previous folder */tmp/disk* into the first partition of
+*hdd.img*:
+```
+imgcp A=hdd.img B=/ cp B=/tmp/disk A=/0/
+```
