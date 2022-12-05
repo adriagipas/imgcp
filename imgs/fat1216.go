@@ -518,14 +518,19 @@ func (self *_FAT1216_FileReader) Read(buf []byte) (int,error) {
     }
     
   }
-  
-  return pos,nil
+
+  if pos == 0 {
+    return 0,io.EOF
+  } else {
+    return pos,nil
+  }
   
 } // end Read
 
 
-func (self *_FAT1216_FileReader) Close() {
+func (self *_FAT1216_FileReader) Close() error {
   self.f.Close ()
+  return nil
 }
 
 

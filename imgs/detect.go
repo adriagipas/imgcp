@@ -32,10 +32,11 @@ import (
 /* TIPUS */
 /*********/
 
-const TYPE_UNK   = 0
-const TYPE_MBR   = 1
-const TYPE_FAT12 = 2
-const TYPE_FAT16 = 3
+const TYPE_UNK          = 0
+const TYPE_MBR          = 1
+const TYPE_FAT12        = 2
+const TYPE_FAT16        = 3
+const TYPE_LOCAL_FOLDER = 4
 
 
 /************/
@@ -51,9 +52,13 @@ func Detect(file_name string) (int,error) {
   // Obté informació del fitxer.
   f,err := os.Open ( file_name )
   if err != nil { return -1,err }
-  // --> Grandària
   info,err := f.Stat ()
   if err != nil { return -1,err }
+  // --> Comprova si és una carpeta
+  if info.IsDir () {
+    return TYPE_LOCAL_FOLDER,nil
+  }
+  // --> Grandària
   nbytes := info.Size()
   if nbytes < HEADER_SIZE {
     return -1,fmt.Errorf ( "'%s' is too small: %d B", file_name, nbytes )

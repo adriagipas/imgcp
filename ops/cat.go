@@ -27,6 +27,7 @@ package ops
 import (
   "errors"
   "fmt"
+  "io"
   "os"
   
   "github.com/adriagipas/imgcp/imgs"
@@ -84,7 +85,7 @@ func Cat ( args *utils.Args ) error {
     
     // Llig i imprimeix
     nbytes,err := f.Read ( buf )
-    if err != nil { return err }
+    if err != nil && err != io.EOF { return err }
     for ; nbytes > 0; {
       n,err := os.Stdout.Write ( buf[:nbytes] )
       if err != nil { return err }
@@ -93,11 +94,13 @@ func Cat ( args *utils.Args ) error {
           " standard output" )
       }
       nbytes,err= f.Read ( buf )
-      if err != nil { return err }
+      if err != nil && err != io.EOF { return err }
     }
     
     // Tanca el fitxer
-    f.Close ()
+    if err := f.Close (); err != nil {
+      return err
+    }
     
   }
   

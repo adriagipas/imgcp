@@ -56,6 +56,9 @@ func NewImage(file_name string) (Image,error) {
   // Crea imatge
   switch ftype {
 
+  case TYPE_LOCAL_FOLDER:
+    return newLocalFolder ( file_name )
+    
   case TYPE_FAT12:
     return newFAT12 ( file_name )
     
@@ -79,12 +82,12 @@ func NewImage(file_name string) (Image,error) {
 
 type FileReader interface {
   
-  // Llig en el buffer. Torna el nombre de bytes llegits. 0 Significa
-  // eof.
+  // Llig en el buffer. Torna el nombre de bytes llegits. Quan aplega
+  // al final torna 0 i io.EOF.
   Read(buf []byte) (int,error)
 
   // Tanca el fitxer.
-  Close()
+  Close() error
   
 }
 

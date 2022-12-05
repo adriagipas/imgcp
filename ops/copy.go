@@ -26,6 +26,7 @@ package ops
 import (
   "errors"
   "fmt"
+  "io"
   
   "github.com/adriagipas/imgcp/imgs"
   "github.com/adriagipas/imgcp/utils"
@@ -180,8 +181,12 @@ func copyFileToDir(
     return fmt.Errorf ( "An error occurred while copying '%s': %s",
       path, err )
   }
-  src_f.Close ()
-  dst_f.Close ()
+  if err := src_f.Close (); err != nil {
+    return err
+  }
+  if err := dst_f.Close (); err != nil {
+    return err
+  }
   
   return nil
   
@@ -221,8 +226,12 @@ func copyArgsToFile(args *utils.Args, dst DstFile) error {
     return fmt.Errorf ( "An error occurred while copying '%s' to '%s': %s",
       path.Path, dst.path.Path, err )
   }
-  src_f.Close ()
-  dst.f.Close ()
+  if err := src_f.Close (); err != nil {
+    return err
+  }
+  if err := dst.f.Close (); err != nil {
+    return err
+  }
 
   return nil
   
@@ -321,7 +330,7 @@ func copyFiles(src imgs.FileReader, dst imgs.FileWriter) error {
 
   // Copia
   nbytes,err := src.Read ( buf )
-  if err != nil { return err }
+  if err != nil && err != io.EOF { return err }
   for ; nbytes > 0; {
     n,err := dst.Write ( buf[:nbytes] )
     if err != nil { return err }
@@ -330,7 +339,7 @@ func copyFiles(src imgs.FileReader, dst imgs.FileWriter) error {
         " file" )
     }
     nbytes,err= src.Read ( buf )
-    if err != nil { return err }
+    if err != nil && err != io.EOF { return err }
   }
   
   return nil
