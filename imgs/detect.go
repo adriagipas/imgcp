@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2023 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -37,6 +37,7 @@ const TYPE_MBR          = 1
 const TYPE_FAT12        = 2
 const TYPE_FAT16        = 3
 const TYPE_LOCAL_FOLDER = 4
+const TYPE_IFF          = 5
 
 
 /************/
@@ -45,9 +46,59 @@ const TYPE_LOCAL_FOLDER = 4
 
 const HEADER_SIZE = 512
 
+func Detect(file_name string) (int,error) {
+  
+  // Primer prova capçaleres 4 bytes.
+  ret,err := detect_h4 ( file_name )
+  if err!=nil { return -1,err }
+  if ret!=TYPE_UNK { return ret,nil }
+  
+  // Prova fitxers de blocs 512
+  return detect_h512 ( file_name )
+  
+} // end Detect
+
+
+// Sols empra els primers 4 bytes per prendre la decisió. Torna
+// TYPE_UNK si no es sap.
+func detect_h4(file_name string) (int,error) {
+
+  // Obté informació del fitxer
+  f,err := os.Open ( file_name )
+  if err != nil { return -1,err }
+  info,err := f.Stat ()
+  if err != nil { return -1,err }
+
+  // Llig primers 4 bytes
+  nbytes := info.Size ()
+  if nbytes < 4 { return TYPE_UNK,nil }
+  var mem [4]byte
+  head := mem[:]
+  n,err := f.Read ( head )
+  if err != nil { return -1,err }
+  if n != 4 {
+    return -1,fmt.Errorf ( "Unexpected error while reading header from '%s'",
+      file_name )
+  }
+  f.Close ()
+
+  // Comprova
+  if head[0]=='F' && head[1]=='O' && head[2]=='R' && head[3]=='M' {
+    return TYPE_IFF,nil
+  } else if head[0]=='C' && head[1]=='A' && head[2]=='T' && head[3]==' ' {
+    return TYPE_IFF,nil
+  } else if head[0]=='L' && head[1]=='I' && head[2]=='S' && head[3]=='T' {
+    return TYPE_IFF,nil
+  } else {
+    return TYPE_UNK,nil
+  }
+  
+} // end detect_h4
+
+
 // Per a detectar el tipus es proven totes les posibiltats que tornen
 // puntuacions. El que tinga més puntuació guanya.
-func Detect(file_name string) (int,error) {
+func detect_h512(file_name string) (int,error) {
 
   // Obté informació del fitxer.
   f,err := os.Open ( file_name )
@@ -95,7 +146,7 @@ func Detect(file_name string) (int,error) {
   
   return ret,nil
   
-} // end Detect
+} // end detect_h512
 
 
 func detect_FAT12(header []byte, nbytes int64) int {

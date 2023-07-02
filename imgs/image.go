@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2023 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -67,6 +67,9 @@ func NewImage(file_name string) (Image,error) {
     
   case TYPE_MBR:
     return newMBR ( file_name ),nil
+
+  case TYPE_IFF:
+    return newIFF ( file_name )
     
   default:
     return nil,fmt.Errorf ( "Unable to detect the image type for file '%s'",
