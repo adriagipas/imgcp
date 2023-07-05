@@ -66,7 +66,8 @@ func List ( args *utils.Args ) error {
     // Llista 
     if res.IsDir {
       i,err := res.Dir.Begin()
-      for ; !i.End() && err == nil; err= i.Next() {
+      if err != nil { return err }
+      for ; err == nil && !i.End(); err= i.Next() {
         if err:= i.List ( os.Stdout ); err != nil {
           return err
         }

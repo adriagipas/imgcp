@@ -28,6 +28,8 @@ import (
   "fmt"
   "io"
   "os"
+  "strconv"
+  "strings"
 
   "github.com/adriagipas/imgcp/utils"
 )
@@ -104,7 +106,23 @@ func (self *_IFF_Chunk) PrintInfo(file io.Writer, prefix string) error {
 
 
 func (self *_IFF_Chunk) GetRootDirectory() (Directory,error) {
-  return nil,errors.New("GetRootDirectory: CAL IMPLEMENTAR");
+
+  // Obté informació capçalera
+  f,err := os.Open ( self.file_name )
+  if err != nil { return nil,err }
+  header,err := self.fReadHeader ( f )
+  if err != nil { return nil,err }
+  f.Close ()
+  
+  // Crea Directory
+  ret := _IFF_Directory{
+    img: self,
+    offset: self.offset+12, // Descarta capçalera
+    nbytes: header.nbytes-4, // Descarta Type
+  }
+  
+  return &ret,nil
+  
 } // end GetRootDirectory
 
 
@@ -164,8 +182,6 @@ func (self *_IFF_Chunk) fReadHeader(f *os.File) (*_IFF_Header,error) {
 } // end fReadHeader
 
 
-
-
 /**************/
 /* IFF HEADER */
 /**************/
@@ -182,3 +198,227 @@ type _IFF_Header struct {
   id       [4]byte
   
 }
+
+
+/*************/
+/* DIRECTORY */
+/*************/
+
+type _IFF_Directory struct {
+
+  img    *_IFF_Chunk // Referència al chunk actual
+  offset  int64  // Offset primer byte dades
+  nbytes  int32 // Grandària en bytes dades
+  
+}
+
+
+// L'offset és el primer byte del chunk
+func (self *_IFF_Directory) initIter(
+  
+  it     *_IFF_DirectoryIter,
+  offset int64,
+  
+) error {
+
+  // Inicialitza
+  it.dir= self
+  it.offset= offset
+  it.num= 0
+  
+  // Obri fitxer
+  f,err := os.Open ( self.img.file_name )
+  if err != nil { return err }
+
+  // Llig ID
+  if err := self.fReadBytes ( f, it.id[:], it.offset ); err != nil {
+    return err
+  }
+
+  // Llig grandària bytes sense padding.
+  var buf [4]byte
+  if err := self.fReadBytes ( f, buf[:], it.offset+4 ); err != nil {
+    return err
+  }
+  it.nbytes= int32(
+    (uint32(buf[0])<<24) |
+      (uint32(buf[1])<<16) |
+      (uint32(buf[2])<<8) |
+      uint32(buf[3]))
+  if it.nbytes < 0 {
+    return fmt.Errorf ( "IFF chunk size is negative: %d", it.nbytes )
+  }
+
+  // Tanca i torna valor
+  f.Close ()
+  
+  return nil
+  
+} // end initIter
+
+
+// Llig bytes de dins de les dades del "directori" (del chunk actual)
+
+func (self *_IFF_Directory) fReadBytes(
+  
+  f      *os.File,
+  buf    []byte,
+  offset int64,
+  
+) error {
+  return utils.ReadBytes ( f, self.offset, int64(self.nbytes), buf, offset )
+} // end fReadBytes
+
+
+func (self *_IFF_Directory) Begin() (DirectoryIter,error) {
+
+  ret := _IFF_DirectoryIter{}
+  if err:= self.initIter ( &ret, self.offset ); err != nil {
+    return nil,err
+  }
+
+  return &ret,nil
+  
+} // end Begin
+
+
+func (self *_IFF_Directory) MakeDir(name string) (Directory,error) {
+  return nil,errors.New ( "Make directory not implemented for Interchange"+
+    " Format Files (IFF)")
+} // end MakeDir
+
+
+func (self *_IFF_Directory) GetFileWriter(name string) (FileWriter,error) {
+  return nil,errors.New ( "Make directory not implemented for Interchange"+
+    " Format Files (IFF)")
+} // end GetFileWriter
+
+
+/******************/
+/* DIRECTORY ITER */
+/******************/
+
+type _IFF_DirectoryIter struct {
+
+  dir    *_IFF_Directory
+  offset int64 // Offset on comença el ID del chunk actual
+  id     [4]byte
+  nbytes int32 // Bytes del chunk actual, no inclou padding
+  num    int64 // Número d'entrada
+  
+}
+
+
+func (self *_IFF_DirectoryIter) CompareToName(name string) bool {
+
+  e_name := "e" + strconv.FormatInt ( self.num, 10 )
+  
+  return strings.ToLower ( name ) == e_name
+  
+} // end CompareToName
+
+
+func (self *_IFF_DirectoryIter) End() bool {
+
+  end := self.dir.offset + int64(self.dir.nbytes)
+  return self.offset >= end
+  
+} // end End
+
+
+func (self *_IFF_DirectoryIter) GetDirectory() (Directory,error) {
+  return nil,errors.New("CAL IMPLEMENTAR GetDirectory")
+} // end GetDirectory
+
+
+func (self *_IFF_DirectoryIter) GetFileReader() (FileReader,error) {
+  return nil,errors.New("CAL IMPLEMENTAR GetFileReader")
+} // end GetFileReader
+
+
+func (self *_IFF_DirectoryIter) GetName() string {
+  fmt.Printf("CAL IMPLEMENTAR GetName\n")
+  os.Exit(1)
+  return "BLO"
+} // end GetName
+
+
+func (self *_IFF_DirectoryIter) List(file io.Writer) error {
+
+  P := func(args... any) {
+    fmt.Fprint ( file, args... )
+  }
+  F := func(format string,args... any) {
+    fmt.Fprintf ( file, format, args... )
+  }
+  
+  // És o no directori
+  it_type := self.Type ()
+  if it_type==DIRECTORY_ITER_TYPE_DIR { P("d") } else { P("-") }
+
+  P("  ")
+
+  // Grandària
+  size := utils.NumBytesToStr ( uint64(self.nbytes) )
+  for i := 0; i < 10-len(size); i++ {
+    P(" ")
+  }
+  P(size,"  ")
+
+  // Tipus
+  F("[%c%c%c%c]  ",self.id[0],self.id[1],self.id[2],self.id[3])
+
+  // Nom
+  F("e%d",self.num)
+  
+  P("\n")
+
+  return nil
+  
+} // end List
+
+
+func (self *_IFF_DirectoryIter) Next() error {
+
+  // Següent offset
+  new_offset := self.offset + 8 + int64(self.nbytes)
+  if (self.nbytes&0x1) != 0 { new_offset++ } // Padding
+  old_num := self.num
+
+  // Carrega valors si no és end
+  end := self.dir.offset + int64(self.dir.nbytes)
+  if new_offset < end {
+    if err:= self.dir.initIter ( self, new_offset ); err != nil {
+      return err
+    }
+  } else {
+    self.offset= new_offset
+  }
+  
+  // Incrementa comptador
+  self.num= old_num + 1
+
+  return nil
+  
+} // end Next
+
+
+func (self *_IFF_DirectoryIter) Remove() error {
+  return errors.New ( "Remove file not implemented for Interchange"+
+    " Format Files (IFF)")
+} // end Remove
+
+
+func (self *_IFF_DirectoryIter) Type() int {
+
+  id := self.id[:]
+  if (id[0]=='F' && id[1]=='O' && id[2]=='R' && id[3]=='M') ||
+    (id[0]=='C' && id[1]=='A' && id[2]=='T' && id[3]==' ') ||
+    (id[0]=='L' && id[1]=='I' && id[2]=='S' && id[3]=='T') ||
+    (id[0]=='P' && id[1]=='R' && id[2]=='O' && id[3]=='P') {
+    return DIRECTORY_ITER_TYPE_DIR
+  } else {
+    return DIRECTORY_ITER_TYPE_FILE
+  }
+  
+} // end Type
