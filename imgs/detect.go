@@ -47,9 +47,14 @@ const TYPE_IFF          = 5
 const HEADER_SIZE = 512
 
 func Detect(file_name string) (int,error) {
+
+  // Primer prova si és una carpeta local
+  ret,err := detect_local_folder ( file_name )
+  if err!=nil { return -1,err }
+  if ret!=TYPE_UNK { return ret,nil }
   
   // Primer prova capçaleres 4 bytes.
-  ret,err := detect_h4 ( file_name )
+  ret,err= detect_h4 ( file_name )
   if err!=nil { return -1,err }
   if ret!=TYPE_UNK { return ret,nil }
   
@@ -57,6 +62,24 @@ func Detect(file_name string) (int,error) {
   return detect_h512 ( file_name )
   
 } // end Detect
+
+
+func detect_local_folder(file_name string) (int,error) {
+
+  // Obté informació del fitxer.
+  f,err := os.Open ( file_name )
+  if err != nil { return -1,err }
+  info,err := f.Stat ()
+  if err != nil { return -1,err }
+
+  // Comprova si és una carpeta
+  if info.IsDir () {
+    return TYPE_LOCAL_FOLDER,nil
+  } else {
+    return TYPE_UNK,nil
+  }
+  
+} // end detect_local_folder
 
 
 // Sols empra els primers 4 bytes per prendre la decisió. Torna
@@ -105,10 +128,6 @@ func detect_h512(file_name string) (int,error) {
   if err != nil { return -1,err }
   info,err := f.Stat ()
   if err != nil { return -1,err }
-  // --> Comprova si és una carpeta
-  if info.IsDir () {
-    return TYPE_LOCAL_FOLDER,nil
-  }
   // --> Grandària
   nbytes := info.Size()
   if nbytes < HEADER_SIZE {

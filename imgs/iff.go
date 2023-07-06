@@ -133,7 +133,7 @@ func (self *_IFF_Chunk) fReadHeader(f *os.File) (*_IFF_Header,error) {
   
   // Llig tipus
   if err := utils.ReadBytes ( f, self.offset,
-    int64(self.length), buf, 0 ); err != nil {
+    int64(self.length), buf, self.offset ); err != nil {
     return nil,fmt.Errorf ( "Error while reading IFF chunk type: %s", err )
   }
   var type_iff int
@@ -152,7 +152,7 @@ func (self *_IFF_Chunk) fReadHeader(f *os.File) (*_IFF_Header,error) {
 
   // Llig Grandària
   if err := utils.ReadBytes ( f, self.offset,
-    int64(self.length), buf, 4 ); err != nil {
+    int64(self.length), buf, self.offset+4 ); err != nil {
     return nil,fmt.Errorf ( "Error while reading IFF chunk size: %s", err )
   }
   chunk_size := int32(
@@ -166,7 +166,7 @@ func (self *_IFF_Chunk) fReadHeader(f *os.File) (*_IFF_Header,error) {
 
   // Llig identificador
   if err := utils.ReadBytes ( f, self.offset,
-    int64(self.length), buf, 8 ); err != nil {
+    int64(self.length), buf, self.offset+8 ); err != nil {
     return nil,fmt.Errorf ( "Error while reading IFF identifier: %s", err )
   }
 
@@ -310,11 +310,7 @@ type _IFF_DirectoryIter struct {
 
 
 func (self *_IFF_DirectoryIter) CompareToName(name string) bool {
-
-  e_name := "e" + strconv.FormatInt ( self.num, 10 )
-  
-  return strings.ToLower ( name ) == e_name
-  
+  return strings.ToLower ( name ) == self.GetName ()
 } // end CompareToName
 
 
@@ -327,19 +323,27 @@ func (self *_IFF_DirectoryIter) End() bool {
 
 
 func (self *_IFF_DirectoryIter) GetDirectory() (Directory,error) {
-  return nil,errors.New("CAL IMPLEMENTAR GetDirectory")
+
+  chunk := newIFFChunk (
+    self.dir.img.file_name,
+    self.offset,
+    uint64(self.nbytes) + 8 )
+
+  return chunk.GetRootDirectory ()
+  
 } // end GetDirectory
 
 
 func (self *_IFF_DirectoryIter) GetFileReader() (FileReader,error) {
-  return nil,errors.New("CAL IMPLEMENTAR GetFileReader")
+  return utils.NewSubfileReader (
+    self.dir.img.file_name,
+    self.offset + 8,
+    int64(self.nbytes) )
 } // end GetFileReader
 
 
 func (self *_IFF_DirectoryIter) GetName() string {
-  fmt.Printf("CAL IMPLEMENTAR GetName\n")
-  os.Exit(1)
-  return "BLO"
+  return "e" + strconv.FormatInt ( self.num, 10 )
 } // end GetName
 
 
@@ -388,7 +392,7 @@ func (self *_IFF_DirectoryIter) Next() error {
   // Carrega valors si no és end
   end := self.dir.offset + int64(self.dir.nbytes)
   if new_offset < end {
-    if err:= self.dir.initIter ( self, new_offset ); err != nil {
+    if err := self.dir.initIter ( self, new_offset ); err != nil {
       return err
     }
   } else {
