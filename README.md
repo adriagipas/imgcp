@@ -1,11 +1,12 @@
 # imgcp
 
 **imgcp** is a command line tool that allows to copy files between old
-  disk images (floppies, hard drives, etc). Currently supported
-  formats are:
+  disk images (floppies, hard drives, archive files, etc). Currently
+  supported formats are:
   
  - FAT12
  - FAT16
+ - *Interchange File Format (IFF)* files (*read only*)
 
 Apart from copying files, **imgcp** also implements other useful operations:
 
