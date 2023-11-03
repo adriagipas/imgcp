@@ -63,8 +63,21 @@ type Info struct {
   Type     int
 }
 
+type CD interface {
+
+  // Torna una estructura amb informació sobre l'estructura del CD.
+  Info() *Info
+
+  // Torna un lector.
+  Reader() (Reader,error)
+  
+}
+
 type Reader interface {
 
+  // Tanca el lector.
+  Close() error
+  
   // Torna l'identificador de l'índex actual en BCD.
   CurrentIndex() uint8
   
@@ -73,9 +86,6 @@ type Reader interface {
 
   // Torna el número (en sencer 1..99) (global) del 'track' actual.
   CurrentTrack() int
-  
-  // Torna una estructura amb informació sobre l'estructura del CD.
-  Info() *Info
 
   // Mou la posició de lectura al principi de l'àrea 'Lead-in' de la
   // sessió actual.
