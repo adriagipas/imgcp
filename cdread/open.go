@@ -19,14 +19,11 @@
  */
 /*
  *  open.go - Obri imatges de CDs.
- *
  */
 
 package cdread
 
 import (
-  "errors"
-  "os"
 )
 
 
@@ -42,13 +39,8 @@ import (
 // l'estructura però després es tanca, i cada vegada que es demana un
 // lector es torna a obrir el fitxer.
 func Open( file_name string ) (CD,error) {
-  return nil,errors.New("TODO - Open!!!")
+
+  // TODO CHECK TYPE
+  return OpenCue ( file_name )
+  
 } // end Open
-
-
-// La diferència amb Open és que en aquesta aproximació el fitxer
-// sempre es manté obert. Això sí, s'assumeix que la imatge comença al
-// principi del fitxer, no en la posició actual.
-func OpenFromFile( fd *os.File ) (CD,error) {
-  return nil,errors.New("TODO - OpenFromFile!!!")
-} // end OpenFromFile

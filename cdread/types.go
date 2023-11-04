@@ -67,7 +67,7 @@ type CD interface {
 
   // Torna una estructura amb informació sobre l'estructura del CD.
   Info() *Info
-
+  
   // Torna un lector.
   Reader() (Reader,error)
   
