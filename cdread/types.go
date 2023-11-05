@@ -68,11 +68,14 @@ type CD interface {
   // Torna una estructura amb informació sobre l'estructura del CD.
   Info() *Info
   
+  /* LOW_LEVEL??
   // Torna un lector.
   Reader() (Reader,error)
+  */
   
 }
 
+/* LOW_LEVEL???
 type Reader interface {
 
   // Tanca el lector.
@@ -122,3 +125,4 @@ type Reader interface {
   Tell() Position
   
 }
+*/

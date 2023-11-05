@@ -192,29 +192,26 @@ type _CD_Cue_Entry struct {
 type _CD_Cue_SectorMap struct {
   offset   int64
   track_id int
-  index_id int
+  index_id uint8
   file     *_CD_Cue_BinFile
   subq_ptr int
 }
 
 type _CD_Cue struct {
-
+  
   // Fitxer
   file_name string
-
+  
   // Binary
   files *_CD_Cue_BinFile
   
   // Cue
   tracks  []_CD_Cue_Track
   entries []_CD_Cue_Entry
-
+  
   // Mapa sectors
   maps []_CD_Cue_SectorMap
-
-  // Posició actual
-  current_sec int64
-
+  
   // Sectors subcanal_q erronis.
   // El format és literalment el del fitxer LSD:
   // 3B MIN SEC FRA || 12B QSUb (inclou CRC)
@@ -408,6 +405,39 @@ func (self *_CD_Cue) readIndex( tok *bufio.Scanner ) error {
 } // end readIndex
 
 
+func (self *_CD_Cue) readPregap( tok *bufio.Scanner ) error {
+
+  // Prepara
+  track:= &self.tracks[len(self.tracks)-1]
+  entry:= _CD_Cue_Entry{
+    entry_type : CD_CUE_ENTRY_TYPE_PREGAP,
+    id         : -1,
+    file       : nil,
+  }
+
+  // Obté time.
+  if !tok.Scan () {
+    err:= tok.Err ()
+    if err == nil {
+      return errors.New (
+        "wrong index format: unable to read time" )
+    } else {
+      return fmt.Errorf ( "wrong index format: %s", err )
+    }
+  }
+  var err error= nil
+  entry.time,err= processTimeCue ( tok.Text () )
+  if err != nil { return err }
+
+  // Afegeix
+  self.entries= append(self.entries,entry)
+  track.N++
+  
+  return nil
+  
+} // end readPregap
+
+
 func (self *_CD_Cue) readCommand( s *bufio.Scanner ) (cont bool,err error) {
 
   // Busca la primera línia no buida
@@ -432,6 +462,8 @@ func (self *_CD_Cue) readCommand( s *bufio.Scanner ) (cont bool,err error) {
     err= self.readTrack ( tok )
   case "INDEX":
     err= self.readIndex ( tok )
+  case "PREGAP":
+    err= self.readPregap ( tok )
   default:
     return false,fmt.Errorf ( "unknown command: %s", cmd )
   }
@@ -474,7 +506,7 @@ func (self *_CD_Cue) calcFilesSize() int64 {
   for p:= self.files; p != nil; p= p.next {
     ret+= p.size
   }
-
+  
   return ret
   
 } // end calcFilesSize
@@ -503,23 +535,169 @@ func (self *_CD_Cue) createMapSectors() error {
   if err:= self.checkIndexesInRange (); err != nil {
     return err
   }
-  fmt.Println ( "Gap", gap )
-  fmt.Println ( "BinSize", bin_size )
-  
-  return errors.New ( "TODO - readMapSectors !!!!" )
+
+  // Reserva memòria
+  self.maps= make([]_CD_Cue_SectorMap,gap+bin_size)
+
+  // Ompli i reajusta 'entries[n].time'.
+  // --> Index 00 Track1 (Pregap 2s)
+  var n int64= 0
+  for ; n < 2*75; n++ {
+    self.maps[n].offset= -1
+    self.maps[n].track_id= 0
+    self.maps[n].index_id= 0x00
+    self.maps[n].file= nil
+    self.maps[n].subq_ptr= -1
+  }
+  // Tracks
+  err:= errors.New ( "invalid PREGAP/INDEX commands" )
+  gap= 2*75
+  var offset int64= 0
+  var track *_CD_Cue_Track
+  var entry *_CD_Cue_Entry
+  var prev_file *_CD_Cue_BinFile= nil
+  var end int64
+  for t:= 0; t < len(self.tracks); t++ {
+    track= &self.tracks[t]
+    prev_ind:= 0
+    for e:= track.p; e != track.p+track.N; e++ {
+      entry= &self.entries[e]
+      switch entry.entry_type {
+      case CD_CUE_ENTRY_TYPE_PREGAP: // Pregap
+        // Calc end
+        if e == len(self.entries)-1 ||
+          self.entries[e+1].entry_type != CD_CUE_ENTRY_TYPE_INDEX {
+          return err
+        }
+        gap+= entry.time
+        end= self.entries[e+1].file.asize + self.entries[e+1].time + gap
+        if end <= n { return err }
+        // Recalculate time and fill
+        entry.time= n
+        for ; n != end; n++ {
+          self.maps[n].offset= -1
+          self.maps[n].track_id= t
+          self.maps[n].index_id= 0x00
+          self.maps[n].file= nil
+          self.maps[n].subq_ptr= -1
+        }
+      case CD_CUE_ENTRY_TYPE_INDEX: // Índex
+        // Comprovacions d'index, el 0 és opcional
+        if (entry.id == 0 && prev_ind != 0) ||
+          (entry.id > 0 && entry.id != prev_ind+1) {
+          return err
+        }
+        if entry.id != 0 { prev_ind++ }
+        // Fixa sector_index01
+        if entry.id == 1 { track.sector_index01= n }
+        // Inicialitza offset si canvia de fitxer.
+        if entry.file != prev_file {
+          offset= 0
+          prev_file= entry.file
+        }
+        // Calc end
+        if e == len(self.entries)-1 {
+          end= int64(len(self.maps))
+        } else if self.entries[e+1].entry_type == CD_CUE_ENTRY_TYPE_INDEX {
+          end= self.entries[e+1].file.asize + self.entries[e+1].time + gap
+        } else {
+          if e+1 == len(self.entries)-1 ||
+            self.entries[e+2].entry_type != CD_CUE_ENTRY_TYPE_INDEX {
+            return err
+          }
+          end= self.entries[e+2].file.asize + self.entries[e+2].time + gap
+        }
+        if end <= n { return err }
+        // Recalculate time and fill
+        entry.time= n
+        for ; n != end; n++ {
+          self.maps[n].offset= offset
+          self.maps[n].track_id= t
+          self.maps[n].index_id= BCD ( entry.id )
+          self.maps[n].file= entry.file
+          self.maps[n].subq_ptr= -1
+          offset+= SECTOR_SIZE
+        }
+      }
+    }
+  }
+
+  return nil
   
 } // end createMapSectors
 
 
 func (self *_CD_Cue) Info() *Info {
-  fmt.Println("TODO - _CD_Cue.Info!!!!")
-  return nil
+
+  // Inicialitza
+  ret:= Info{}
+  ret.Sessions= make([]SessionInfo,1)
+  tracks:= make([]TrackInfo,len(self.tracks))
+  indexes:= make([]IndexInfo,len(self.entries))
+
+  // Sessions.
+  ret.Sessions[0].Tracks= tracks
+
+  // Tracks i entries
+  var tp *_CD_Cue_Track
+  var ep *_CD_Cue_Entry
+  ret.Tracks= tracks
+  for t:= 0; t < len(self.tracks); t++ {
+    tp= &self.tracks[t]
+    tracks[t].Id= BCD ( t+1 )
+    tracks[t].Indexes= indexes[tp.p:tp.p+tp.N]
+    if t > 0 {
+      tracks[t-1].PosLastSector= GetPosition ( self.entries[tp.p].time - 1 )
+    }
+    for e:= tp.p; e != tp.p+tp.N; e++ {
+      ep= &self.entries[e]
+      if ep.entry_type == CD_CUE_ENTRY_TYPE_INDEX {
+        indexes[e].Id= BCD ( ep.id )
+      } else {
+        indexes[e].Id= 0
+      }
+      indexes[e].Pos= GetPosition ( ep.time )
+    }
+  }
+  tracks[len(self.tracks)-1].PosLastSector=
+    GetPosition ( int64(len(self.maps))-1 )
+
+  // Disk type. (Açò és com un resum)
+  switch self.tracks[0].track_type {
+  case CD_CUE_TRACK_TYPE_AUDIO:
+    ret.Type= DISK_TYPE_AUDIO
+  case CD_CUE_TRACK_TYPE_MODE1:
+    ret.Type= DISK_TYPE_MODE1
+  case CD_CUE_TRACK_TYPE_MODE2:
+    ret.Type= DISK_TYPE_MODE2
+  }
+  for t:= 1; t < len(self.tracks); t++ {
+    tp= &self.tracks[t]
+    if ret.Type == DISK_TYPE_AUDIO { // Sols audio
+      if tp.track_type != CD_CUE_TRACK_TYPE_AUDIO {
+        ret.Type= DISK_TYPE_UNK
+        break
+      }
+    } else if ret.Type == DISK_TYPE_MODE1 || ret.Type == DISK_TYPE_MODE1_AUDIO {
+      if tp.track_type == CD_CUE_TRACK_TYPE_AUDIO {
+        ret.Type= DISK_TYPE_MODE1_AUDIO
+      } else if tp.track_type == CD_CUE_TRACK_TYPE_MODE2 {
+        ret.Type= DISK_TYPE_UNK
+        break
+      }
+    } else if ret.Type == DISK_TYPE_MODE2 || ret.Type == DISK_TYPE_MODE2_AUDIO {
+      if tp.track_type == CD_CUE_TRACK_TYPE_AUDIO {
+        ret.Type= DISK_TYPE_MODE2_AUDIO
+      } else if tp.track_type == CD_CUE_TRACK_TYPE_MODE1 {
+        ret.Type= DISK_TYPE_UNK
+        break
+      }
+    }
+  }
+  
+  return &ret
+  
 } // end Info
-
-
-func (self *_CD_Cue) Reader() (Reader,error) {
-  return nil,errors.New("TODO - _CD_Cue.Reader!!!!")
-} // end Reader
 
 
 
