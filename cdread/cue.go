@@ -27,6 +27,7 @@ import (
   "bufio"
   "errors"
   "fmt"
+  "io"
   "os"
   "path"
   "strconv"
@@ -149,6 +150,153 @@ func processTimeCue( str string ) (int64,error) {
 
 
 
+/****************/
+/* TRACK READER */
+/****************/
+
+type _Cue_TrackReader struct {
+
+  cd       *_CD_Cue
+  track    *_CD_Cue_Track
+  track_id int
+  
+  // Situació sectors
+  next_sector int64
+  eof         bool
+  
+  // Sector actual.
+  // NOTA!!! SECTOR_SIZE té trellat en modes RAW.
+  sec_data  [SECTOR_SIZE]byte
+  data      []byte // Slice de sec_data
+  data_size int
+  pos       int
+  bin_file  *_CD_Cue_BinFile
+  file      *os.File
+  
+}
+
+// Intenta carregar el següent sector. Si no es pot perquè s'ha
+// aplegat al final es fica EOF a true.
+func (self *_Cue_TrackReader) loadNextSector() error {
+  
+  // Eof
+  if self.eof ||
+    self.next_sector >= int64(len(self.cd.maps)) ||
+    self.cd.maps[self.next_sector].track_id != self.track_id {
+    self.eof= true
+    return nil
+  }
+
+  // Prepara fitxer.
+  bin_file:= self.cd.maps[self.next_sector].file
+  if bin_file != self.bin_file {
+    
+    self.bin_file= bin_file
+
+    // Tanca si tenim algun fitxer obert
+    if self.file != nil {
+      if err:= self.file.Close (); err != nil { return err }
+    }
+    
+    // Obri nou fitxer
+    var err error
+    self.file,err= os.Open ( bin_file.file_name )
+    if err != nil { return err }
+    
+  }
+
+  // Mou a la posició del sector
+  new_off,err:= self.file.Seek ( self.cd.maps[self.next_sector].offset, 0 )
+  if err != nil { return err }
+  if new_off != self.cd.maps[self.next_sector].offset {
+    return fmt.Errorf ( "failed to read sector %d", self.next_sector )
+  }
+
+  // Llig el sector.
+  n,err:= self.file.Read ( self.sec_data[:] )
+  if err != nil { return err }
+  if n != SECTOR_SIZE {
+    return fmt.Errorf ( "failed to read sector %d", self.next_sector )
+  }
+
+  // Actualitza estat.
+  switch self.track.track_type {
+  case TRACK_TYPE_AUDIO:
+    self.data= self.sec_data[:]
+    self.data_size= SECTOR_SIZE
+  case TRACK_TYPE_MODE1_RAW:
+    self.data= self.sec_data[16:2064]
+    self.data_size= 2048
+  default:
+    return fmt.Errorf ( "load sectors of type %d not implemented",
+      self.track.track_type )
+  }
+  self.pos= 0
+  self.next_sector++
+
+  return nil
+  
+} // end loadNextSector
+
+
+func (self *_Cue_TrackReader) Close() (err error) {
+
+  if self.file != nil {
+    err= self.file.Close ()
+  } else {
+    err= nil
+  }
+
+  return
+  
+} // end Close
+
+
+func (self *_Cue_TrackReader) Read( b []byte ) (n int,err error) {
+
+  // EOF
+  if self.eof { return 0,io.EOF }
+
+  // Llig
+  pos,remain:= 0,len(b)
+  for remain > 0 && !self.eof {
+
+    // Recarrega si cal
+    // ATENCIÓ!! Si els sectors no són d'aquesta grandària podria
+    // fallar. Ara sols suporte RAW sectors.
+    if self.pos >= self.data_size {
+      if err:= self.loadNextSector (); err != nil {
+        return 0,err
+      }
+    }
+
+    // Llig
+    if !self.eof {
+      // --> Bytes a llegir
+      avail:= self.data_size-self.pos
+      var nbytes int
+      if remain > avail {
+        nbytes= avail
+      } else {
+        nbytes= remain
+      }
+      // --> Còpia
+      copy ( b[pos:pos+nbytes], self.data[self.pos:self.pos+nbytes])
+      // --> Actualitza
+      pos+= nbytes
+      remain-= nbytes
+      self.pos+= nbytes
+    }
+    
+  }
+
+  return pos,nil
+  
+} // end Read
+
+
+
+
 /******/
 /* CD */
 /******/
@@ -160,12 +308,6 @@ type _CD_Cue_BinFile struct {
                   // incloure l'actual.
   next      *_CD_Cue_BinFile
 }
-
-const (
-  CD_CUE_TRACK_TYPE_AUDIO = 0
-  CD_CUE_TRACK_TYPE_MODE1 = 1
-  CD_CUE_TRACK_TYPE_MODE2 = 2
-)
 
 type _CD_Cue_Track struct {
   track_type     int
@@ -329,15 +471,15 @@ func (self *_CD_Cue) readTrack( tok *bufio.Scanner ) error {
   }
   switch mode:= tok.Text (); mode {
   case "AUDIO":
-    track.track_type= CD_CUE_TRACK_TYPE_AUDIO
+    track.track_type= TRACK_TYPE_AUDIO
   case "MODE1/2352":
-    track.track_type= CD_CUE_TRACK_TYPE_MODE1
+    track.track_type= TRACK_TYPE_MODE1_RAW
   case "MODE2/2352":
-    track.track_type= CD_CUE_TRACK_TYPE_MODE2
+    track.track_type= TRACK_TYPE_MODE2_RAW
   default:
     return fmt.Errorf ( "TRACK format unknown: %s", mode )
   }
-
+  
   // Afegeix.
   self.tracks= append(self.tracks,track)
   
@@ -644,6 +786,7 @@ func (self *_CD_Cue) Info() *Info {
   ret.Tracks= tracks
   for t:= 0; t < len(self.tracks); t++ {
     tp= &self.tracks[t]
+    tracks[t].Type= tp.track_type
     tracks[t].Id= BCD ( t+1 )
     tracks[t].Indexes= indexes[tp.p:tp.p+tp.N]
     if t > 0 {
@@ -662,42 +805,47 @@ func (self *_CD_Cue) Info() *Info {
   tracks[len(self.tracks)-1].PosLastSector=
     GetPosition ( int64(len(self.maps))-1 )
 
-  // Disk type. (Açò és com un resum)
-  switch self.tracks[0].track_type {
-  case CD_CUE_TRACK_TYPE_AUDIO:
-    ret.Type= DISK_TYPE_AUDIO
-  case CD_CUE_TRACK_TYPE_MODE1:
-    ret.Type= DISK_TYPE_MODE1
-  case CD_CUE_TRACK_TYPE_MODE2:
-    ret.Type= DISK_TYPE_MODE2
-  }
-  for t:= 1; t < len(self.tracks); t++ {
-    tp= &self.tracks[t]
-    if ret.Type == DISK_TYPE_AUDIO { // Sols audio
-      if tp.track_type != CD_CUE_TRACK_TYPE_AUDIO {
-        ret.Type= DISK_TYPE_UNK
-        break
-      }
-    } else if ret.Type == DISK_TYPE_MODE1 || ret.Type == DISK_TYPE_MODE1_AUDIO {
-      if tp.track_type == CD_CUE_TRACK_TYPE_AUDIO {
-        ret.Type= DISK_TYPE_MODE1_AUDIO
-      } else if tp.track_type == CD_CUE_TRACK_TYPE_MODE2 {
-        ret.Type= DISK_TYPE_UNK
-        break
-      }
-    } else if ret.Type == DISK_TYPE_MODE2 || ret.Type == DISK_TYPE_MODE2_AUDIO {
-      if tp.track_type == CD_CUE_TRACK_TYPE_AUDIO {
-        ret.Type= DISK_TYPE_MODE2_AUDIO
-      } else if tp.track_type == CD_CUE_TRACK_TYPE_MODE1 {
-        ret.Type= DISK_TYPE_UNK
-        break
-      }
-    }
-  }
-  
   return &ret
   
 } // end Info
+
+
+func (self *_CD_Cue) TrackReader(
+
+  session_id int,
+  track_id   int,
+  
+) (TrackReader,error) {
+  
+  // Selecciona sessió
+  if session_id != 0 {
+    return nil,fmt.Errorf ( "session (%d) out of range", session_id )
+  }
+  
+  // Selecciona track
+  if track_id < 0 || track_id >= len(self.tracks) {
+    return nil,fmt.Errorf ( "track (%d) out of range", track_id )
+  }
+  track:= &self.tracks[track_id]
+
+  // Crea trackreader
+  ret:= _Cue_TrackReader{
+    cd          : self,
+    track       : track,
+    track_id    : self.maps[track.sector_index01].track_id,
+    next_sector : track.sector_index01,
+    eof         : false,
+    bin_file    : nil,
+    file        : nil,
+    pos         : SECTOR_SIZE,
+  }
+  if err:= ret.loadNextSector (); err != nil {
+    return nil,err
+  }
+  
+  return &ret,nil
+  
+} // end TrackReader
 
 
 

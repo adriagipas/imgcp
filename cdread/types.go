@@ -27,12 +27,10 @@ package cdread
 const SECTOR_SIZE = 0x930
 
 const (
-  DISK_TYPE_AUDIO       = 0
-  DISK_TYPE_MODE1       = 1
-  DISK_TYPE_MODE1_AUDIO = 2
-  DISK_TYPE_MODE2       = 3
-  DISK_TYPE_MODE2_AUDIO = 4
-  DISK_TYPE_UNK         = -1
+  TRACK_TYPE_AUDIO     = 0
+  TRACK_TYPE_MODE1_RAW = 1
+  TRACK_TYPE_MODE2_RAW = 2
+  TRACK_TYPE_UNK       = -1
 )
 
 type Position struct {
@@ -51,6 +49,7 @@ type TrackInfo struct {
   Indexes       []IndexInfo
   PosLastSector Position // Posició absoluta de l'últim sector del
                          // track
+  Type          int
 }
 
 type SessionInfo struct {
@@ -60,18 +59,33 @@ type SessionInfo struct {
 type Info struct {
   Sessions []SessionInfo
   Tracks   []TrackInfo
-  Type     int
 }
 
 type CD interface {
 
   // Torna una estructura amb informació sobre l'estructura del CD.
   Info() *Info
+
+  // Torna un lector de bytes d'un track.
+  TrackReader(session int,track int) (TrackReader,error)
   
   /* LOW_LEVEL??
   // Torna un lector.
   Reader() (Reader,error)
   */
+  
+}
+
+type TrackReader interface {
+
+  // Tanca el lector. Deprés de tancat no es pot llegir.
+  Close() error
+
+  // Funciona exactament com la interfície Reader.
+  Read(b []byte) (n int,err error)
+
+  // Mou el lector a la posició indicada.
+  //Seek(offset int64) error
   
 }
 
