@@ -26,13 +26,6 @@ package cdread
 
 const SECTOR_SIZE = 0x930
 
-const (
-  TRACK_TYPE_AUDIO     = 0
-  TRACK_TYPE_MODE1_RAW = 1
-  TRACK_TYPE_MODE2_RAW = 2
-  TRACK_TYPE_UNK       = -1
-)
-
 type Position struct {
   Minutes uint8 // BCD, 74, (00h..73h)
   Seconds uint8 // BCD, 60, (00h..59h)
@@ -43,6 +36,14 @@ type IndexInfo struct {
   Id  uint8    // Identificador en BCD 99 (01h..99h) Pot existir una 0.
   Pos Position
 }
+
+const (
+  TRACK_TYPE_AUDIO          = 0
+  TRACK_TYPE_MODE1_RAW      = 1
+  TRACK_TYPE_MODE2_RAW      = 2
+  TRACK_TYPE_MODE2_CDXA_RAW = 3
+  TRACK_TYPE_UNK            = -1
+)
 
 type TrackInfo struct {
   Id            uint8    // Identificador en BCD 99 (01h..99h)
@@ -61,18 +62,22 @@ type Info struct {
   Tracks   []TrackInfo
 }
 
+// Açò sols afecta als CD-XA
+const (
+  MODE_DATA            = 0 // Es pot ficar 0. En CD-XA ignora els
+                           // sectors Form2 .
+  MODE_CDXA            = 1 // Torna tots els sectors (cadascun en la
+                           // grandària que toque).
+  MODE_CDXA_MEDIA_ONLY = 2 // Ignora sectors Form1
+)
+
 type CD interface {
 
   // Torna una estructura amb informació sobre l'estructura del CD.
   Info() *Info
-
-  // Torna un lector de bytes d'un track.
-  TrackReader(session int,track int) (TrackReader,error)
   
-  /* LOW_LEVEL??
-  // Torna un lector.
-  Reader() (Reader,error)
-  */
+  // Torna un lector de bytes d'un track.
+  TrackReader(session int,track int,mode int) (TrackReader,error)
   
 }
 
@@ -84,59 +89,8 @@ type TrackReader interface {
   // Funciona exactament com la interfície Reader.
   Read(b []byte) (n int,err error)
 
-  // Mou el lector a la posició indicada.
-  //Seek(offset int64) error
+  // Mou el lector al principi del sector (0 és el primer sector del
+  // track) indicat.
+  Seek(sector int64) error
   
 }
-
-/* LOW_LEVEL???
-type Reader interface {
-
-  // Tanca el lector.
-  Close() error
-  
-  // Torna l'identificador de l'índex actual en BCD.
-  CurrentIndex() uint8
-  
-  // Torna el número de la sessió actual. Començant per 0.
-  CurrentSession() int
-
-  // Torna el número (en sencer 1..99) (global) del 'track' actual.
-  CurrentTrack() int
-
-  // Mou la posició de lectura al principi de l'àrea 'Lead-in' de la
-  // sessió actual.
-  MoveToLeadIn() error
-  
-  // Mou la posició de lectura al principi de la SESS indicat
-  // (1..?). Torna nil si s'ha pogut moure sense cap
-  // problema. Internament llig el TOC.
-  MoveToSession(session int) error
-
-  // Mou la posició de lectura al principi del TRACK indicat (1..99)
-  // (índex global) (No és BCD!!!). Torna nil si s'ha pogut moure
-  // sense cap problema.
-  MoveToTrack(track int) error
-
-  // Torna el nombre de sessions.
-  NumSessions() int
-
-  // Llig en BUF el sector actual (grandària SECTOR_SIZE bytes) i
-  // avança al següent sector si MOVE és cert. El contingut del sector
-  // és tot (no sóls el datafield) i de fet pot ser que no siga un
-  // sector de dades. IS_AUDIO indica si el sector és d'audio.
-  Read(buf []byte,move bool) (is_audio bool,err error)
-  
-  // Fica el disc en l'estat inicial, com si haguerem reinsertat el
-  // disc en la unitat.
-  Reset() error
-
-  // Fa un seek a la posició indicada (Minut.Segon.Sector). Torna nil
-  // si tot ha anat bé. Els valors estan en decimal.
-  Seek(minut int,segon int,sector int) error
-
-  // Torna la posició actual (és en BCD).
-  Tell() Position
-  
-}
-*/

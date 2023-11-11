@@ -156,6 +156,7 @@ func processTimeCue( str string ) (int64,error) {
 
 type _Cue_TrackReader struct {
 
+  mode     int
   cd       *_CD_Cue
   track    *_CD_Cue_Track
   track_id int
@@ -220,6 +221,7 @@ func (self *_Cue_TrackReader) loadNextSector() error {
   }
 
   // Actualitza estat.
+  self.pos= 0
   switch self.track.track_type {
   case TRACK_TYPE_AUDIO:
     self.data= self.sec_data[:]
@@ -227,11 +229,27 @@ func (self *_Cue_TrackReader) loadNextSector() error {
   case TRACK_TYPE_MODE1_RAW:
     self.data= self.sec_data[16:2064]
     self.data_size= 2048
+  case TRACK_TYPE_MODE2_RAW:
+    self.data= self.sec_data[16:]
+    self.data_size= 2336
+  case TRACK_TYPE_MODE2_CDXA_RAW:
+    if self.sec_data[0x12]&0x20 == 0 { // Form1
+      self.data= self.sec_data[0x18:0x818]
+      self.data_size= 2048
+      if self.mode == MODE_CDXA_MEDIA_ONLY {
+        self.pos= self.data_size+1
+      }
+    } else { // Form2
+      self.data= self.sec_data[0x18:0x18+2324]
+      self.data_size= 2324
+      if self.mode == MODE_DATA {
+        self.pos= self.data_size+1
+      }
+    }
   default:
     return fmt.Errorf ( "load sectors of type %d not implemented",
       self.track.track_type )
   }
-  self.pos= 0
   self.next_sector++
 
   return nil
@@ -264,7 +282,7 @@ func (self *_Cue_TrackReader) Read( b []byte ) (n int,err error) {
     // Recarrega si cal
     // ATENCIÓ!! Si els sectors no són d'aquesta grandària podria
     // fallar. Ara sols suporte RAW sectors.
-    if self.pos >= self.data_size {
+    for self.pos >= self.data_size {
       if err:= self.loadNextSector (); err != nil {
         return 0,err
       }
@@ -293,6 +311,32 @@ func (self *_Cue_TrackReader) Read( b []byte ) (n int,err error) {
   return pos,nil
   
 } // end Read
+
+
+func (self *_Cue_TrackReader) Seek( sector int64 ) error {
+
+  // Tanca fitxers
+  if self.file != nil {
+    if err:= self.file.Close (); err != nil {
+      return err
+    }
+    self.file= nil
+  }
+  self.bin_file= nil
+
+  // Actualitza estat
+  self.eof= false
+  self.pos= SECTOR_SIZE
+  self.next_sector= self.track.sector_index01 + sector
+
+  // Intenta carregar
+  if err:= self.loadNextSector (); err != nil {
+    return err
+  }
+
+  return nil
+  
+} // end Seek
 
 
 
@@ -769,6 +813,31 @@ func (self *_CD_Cue) createMapSectors() error {
 } // end createMapSectors
 
 
+func (self *_CD_Cue) relabelCDXATracks() error {
+
+  var track *_CD_Cue_Track
+  var tr TrackReader
+  var err error
+  for i:= 0; i < len(self.tracks); i++ {
+    track= &self.tracks[i]
+    if track.track_type == TRACK_TYPE_MODE2_RAW {
+      tr,err= self.TrackReader ( 0, i, 0 )
+      if err != nil { return err }
+      defer tr.Close ()
+      if is_cdxa,err:= CheckTrackIsMode2CDXA ( tr ); err != nil {
+        return err
+      } else if is_cdxa {
+        track.track_type= TRACK_TYPE_MODE2_CDXA_RAW
+      }
+      tr.Close ()
+    }
+  }
+  
+  return nil
+  
+} // end relabelCDXATracks
+
+
 func (self *_CD_Cue) Info() *Info {
 
   // Inicialitza
@@ -814,6 +883,7 @@ func (self *_CD_Cue) TrackReader(
 
   session_id int,
   track_id   int,
+  mode       int,
   
 ) (TrackReader,error) {
   
@@ -830,6 +900,7 @@ func (self *_CD_Cue) TrackReader(
 
   // Crea trackreader
   ret:= _Cue_TrackReader{
+    mode        : mode,
     cd          : self,
     track       : track,
     track_id    : self.maps[track.sector_index01].track_id,
@@ -871,6 +942,11 @@ func OpenCue( file_name string ) (CD,error) {
 
   // Crea el mapa de sectors
   if err:= ret.createMapSectors (); err != nil {
+    return nil,err
+  }
+
+  // Identifica tracks CDXA.
+  if err:= ret.relabelCDXATracks(); err != nil {
     return nil,err
   }
   
