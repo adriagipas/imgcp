@@ -23,24 +23,19 @@
 
 package cdread
 
-import (
-)
 
 
 
-
-/****************/
-/* PART PÚBLICA */
-/****************/
-
-// Obté una estructura CD que serveix per a llegir la imatge del
-// fitxer proporcionat. Si s'utilitza aquest mètodo s'opta per una
-// estratègia baix demanda. És a dir, s'obri el fitxer per a generar
-// l'estructura però després es tanca, i cada vegada que es demana un
-// lector es torna a obrir el fitxer.
+// Obté una estructura CD que serveix per a llegir els tracks de ls la
+// imatge del fitxer proporcionat.
 func Open( file_name string ) (CD,error) {
 
-  // TODO CHECK TYPE
-  return OpenCue ( file_name )
+  // NOTA! Tenint en compte com és cada format crec que l'òptim és
+  // directament intentar llegir-los seguint el següent ordre.
+  cd,err:= OpenIso ( file_name )
+  if err == nil { return cd,nil }
+  cd,err= OpenCue ( file_name )
+  
+  return cd,err
   
 } // end Open

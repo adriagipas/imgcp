@@ -42,6 +42,7 @@ const (
   TRACK_TYPE_MODE1_RAW      = 1
   TRACK_TYPE_MODE2_RAW      = 2
   TRACK_TYPE_MODE2_CDXA_RAW = 3
+  TRACK_TYPE_ISO            = 4
   TRACK_TYPE_UNK            = -1
 )
 
