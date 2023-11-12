@@ -74,6 +74,9 @@ const (
 
 type CD interface {
 
+  // Torna un string amb el nom del format de la imatge.
+  Format() string
+  
   // Torna una estructura amb informació sobre l'estructura del CD.
   Info() *Info
   

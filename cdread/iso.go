@@ -77,6 +77,9 @@ type _CD_Iso struct {
 }
 
 
+func (self *_CD_Iso) Format() string { return "ISO 9660 image" }
+
+
 func (self *_CD_Iso) Info() *Info {
 
   // Inicialitza.
@@ -94,8 +97,9 @@ func (self *_CD_Iso) Info() *Info {
   tracks[0].Type= TRACK_TYPE_ISO
   tracks[0].Id= BCD ( 1 )
   tracks[0].Indexes= indexes
-  indexes[0].Pos= GetPosition ( 0 )
-  tracks[0].PosLastSector= GetPosition ( self.num_sectors - 1 )
+  indexes[0].Id= BCD ( 1 )
+  indexes[0].Pos= GetPosition ( 0 + 2*75 )
+  tracks[0].PosLastSector= GetPosition ( self.num_sectors - 1  + 2*75 )
   
   return &ret
   

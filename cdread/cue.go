@@ -838,6 +838,8 @@ func (self *_CD_Cue) relabelCDXATracks() error {
 } // end relabelCDXATracks
 
 
+func (self *_CD_Cue) Format() string { return "CUE/BIN" }
+
 func (self *_CD_Cue) Info() *Info {
 
   // Inicialitza

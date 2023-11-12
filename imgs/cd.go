@@ -25,6 +25,7 @@ package imgs
 
 import (
   "errors"
+  "fmt"
   "io"
   
   "github.com/adriagipas/imgcp/cdread"
@@ -62,7 +63,73 @@ func newCD( file_name string ) (*_CD,error) {
 
 
 func (self *_CD) PrintInfo( file io.Writer, prefix string ) error {
-  return errors.New("TODO - CD.PrintInfo")
+
+  // Preparació impressió
+  P:= fmt.Fprintln
+  F:= fmt.Fprintf
+
+  // Obté informació
+  info:= self.cd.Info ()
+  
+  // Imprimeix
+  F(file,"%sCD-Rom Image (%s)\n", prefix, self.cd.Format () )
+  P(file,prefix,"")
+  P(file,prefix, "Sessions:")
+  
+  var sess *cdread.SessionInfo
+  var track *cdread.TrackInfo
+  for s:= 0; s < len(info.Sessions); s++ {
+    sess= &info.Sessions[s]
+    P(file,"")
+    F(file,"%s  %d) Tracks:\n",prefix,s)
+    P(file,"")
+    for t:= 0; t < len(sess.Tracks); t++ {
+      track= &sess.Tracks[t]
+
+      // Identificador
+      F(file,"%s    Id: %02X",prefix,track.Id)
+
+      // Posició inicial
+      // --> Busca índex inicial
+      var i int
+      for i= 0; i < len(track.Indexes) && track.Indexes[i].Id != 1; i++ {
+      }
+      if i==len(track.Indexes) {
+        F(file, "  Start: ??:??:??")
+      } else {
+        F(file, "  Start: %02x:%02x:%02x",
+          track.Indexes[i].Pos.Minutes,
+          track.Indexes[i].Pos.Seconds,
+          track.Indexes[i].Pos.Sector )
+      }
+      
+      // Tipus
+      F(file,"  Type: ")
+      switch track.Type {
+      case cdread.TRACK_TYPE_AUDIO:
+        F(file,"Audio")
+      case cdread.TRACK_TYPE_MODE1_RAW:
+        F(file,"Mode1 (Raw sectors)")
+      case cdread.TRACK_TYPE_MODE2_RAW:
+        F(file,"Mode2 (Raw sectors)")
+      case cdread.TRACK_TYPE_MODE2_CDXA_RAW:
+        F(file,"CD-XA/Mode2 (Raw sectors)")
+      case cdread.TRACK_TYPE_ISO:
+        F(file,"Data")
+      default:
+        F(file,"Unknown")
+      }
+
+      // Salt de línia
+      P(file,"")
+
+      // NOTA!!! TODO!!! Faltaria provar a imprimir informació ISO.
+      
+    }
+  }
+  
+  return nil
+  
 } // end PrintInfo
 
 

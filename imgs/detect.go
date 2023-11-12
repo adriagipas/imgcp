@@ -61,13 +61,13 @@ func Detect(file_name string) (int,error) {
   if err!=nil { return -1,err }
   if ret!=TYPE_UNK { return ret,nil }
   
-  // Prova fitxers de blocs 512
-  ret,err= detect_h512 ( file_name )
+  // Prova fitxers de CD
+  ret,err= detect_cd ( file_name )
   if err!=nil { return -1,err }
   if ret!=TYPE_UNK { return ret,nil }
-  
-  // Per al final prova CD
-  return detect_cd ( file_name )
+
+  // Prova fitxers de blocs 512
+  return detect_h512 ( file_name )
   
 } // end Detect
 
