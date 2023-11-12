@@ -271,23 +271,23 @@ func (self *_Cue_TrackReader) Close() (err error) {
 
 
 func (self *_Cue_TrackReader) Read( b []byte ) (n int,err error) {
-
+  
   // EOF
   if self.eof { return 0,io.EOF }
 
   // Llig
   pos,remain:= 0,len(b)
   for remain > 0 && !self.eof {
-
+    
     // Recarrega si cal
     // ATENCIÓ!! Si els sectors no són d'aquesta grandària podria
     // fallar. Ara sols suporte RAW sectors.
-    for self.pos >= self.data_size {
+    for self.pos >= self.data_size && !self.eof {
       if err:= self.loadNextSector (); err != nil {
         return 0,err
       }
     }
-
+    
     // Llig
     if !self.eof {
       // --> Bytes a llegir
@@ -307,7 +307,7 @@ func (self *_Cue_TrackReader) Read( b []byte ) (n int,err error) {
     }
     
   }
-
+  
   return pos,nil
   
 } // end Read
