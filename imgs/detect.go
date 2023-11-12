@@ -26,6 +26,8 @@ package imgs
 import (
   "fmt"
   "os"
+
+  "github.com/adriagipas/imgcp/cdread"
 )
 
 /*********/
@@ -38,6 +40,7 @@ const TYPE_FAT12        = 2
 const TYPE_FAT16        = 3
 const TYPE_LOCAL_FOLDER = 4
 const TYPE_IFF          = 5
+const TYPE_CD           = 6
 
 
 /************/
@@ -59,9 +62,26 @@ func Detect(file_name string) (int,error) {
   if ret!=TYPE_UNK { return ret,nil }
   
   // Prova fitxers de blocs 512
-  return detect_h512 ( file_name )
+  ret,err= detect_h512 ( file_name )
+  if err!=nil { return -1,err }
+  if ret!=TYPE_UNK { return ret,nil }
+  
+  // Per al final prova CD
+  return detect_cd ( file_name )
   
 } // end Detect
+
+
+// CD però també iso.
+func detect_cd( file_name string ) (int,error) {
+
+  // Intenta obrir com si fora un CD
+  _,err:= cdread.Open ( file_name )
+  if err != nil { return TYPE_UNK,nil }
+  
+  return TYPE_CD,nil
+  
+} // end detect_cd
 
 
 func detect_local_folder(file_name string) (int,error) {

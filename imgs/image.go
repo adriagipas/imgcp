@@ -70,6 +70,9 @@ func NewImage(file_name string) (Image,error) {
 
   case TYPE_IFF:
     return newIFF ( file_name )
+
+  case TYPE_CD:
+    return newCD ( file_name )
     
   default:
     return nil,fmt.Errorf ( "Unable to detect the image type for file '%s'",
