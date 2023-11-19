@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2023 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
