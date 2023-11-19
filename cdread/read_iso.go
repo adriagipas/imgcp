@@ -240,6 +240,7 @@ type _ISO_FileReader struct {
   gap_size        uint8
   current_file_lb uint8
   buf             []byte
+  f               TrackReader
   
 }
 
@@ -247,7 +248,7 @@ type _ISO_FileReader struct {
 func (self *_ISO_FileReader) loadBufNoInterleave() error {
 
   var err error
-  self.buf,err= self.iso.readLogicalBlock ( self.current_lb )
+  self.buf,err= self.iso.readLogicalBlock ( self.f, self.current_lb )
   if err != nil { return err }
   self.current_lb++
 
@@ -268,6 +269,11 @@ func (self *_ISO_FileReader) loadBuf() error {
     return self.loadBufInterleave ()
   }
 } // end loadBuf
+
+
+func (self *_ISO_FileReader) Close() error {
+  return self.f.Close ()
+} // end Close
 
 
 func (self *_ISO_FileReader) Read( data []byte) (n int,err error) {
@@ -446,28 +452,36 @@ const (
   
 )
 
+// Segueix una aproximació greedy.
 type ISO struct {
 
   // Públic
   PrimaryVolume ISO_PrimaryVolume
   
   // Privat
-  f           TrackReader
+  cd          CD
+  session     int
+  track       int
   current_sec int64
   buffer      [LOGICAL_SECTOR_SIZE]byte
   
 }
 
 
-func ReadISO( f TrackReader ) (*ISO,error) {
+func ReadISO( cd CD, session int, track int ) (*ISO,error) {
 
   ret:= ISO{
-    f : f,
+    cd : cd,
+    session : session,
+    track : track,
     current_sec : -1,
   }
   
   // Parse volume descriptors.
-  if err:= ret.readVolumeDescriptors (); err != nil {
+  f,err:= cd.TrackReader ( session, track, 0 )
+  if err != nil { return nil,err }
+  defer f.Close ()
+  if err:= ret.readVolumeDescriptors ( f ); err != nil {
     return nil,err
   }
   
@@ -476,17 +490,17 @@ func ReadISO( f TrackReader ) (*ISO,error) {
 } // end ReadISO
 
 
-func (self *ISO) readVolumeDescriptors() error {
+func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
 
   var buf [LOGICAL_SECTOR_SIZE]byte
   sector,end,num_pv:= int64(0x10),false,0
   for ; !end; sector++ {
 
     // Prova a llegir
-    if err:= self.f.Seek ( sector ); err != nil {
+    if err:= f.Seek ( sector ); err != nil {
       return err
     }
-    if nbytes,err:= self.f.Read ( buf[:] ); err != nil {
+    if nbytes,err:= f.Read ( buf[:] ); err != nil {
       return err
     } else if nbytes != LOGICAL_SECTOR_SIZE {
       return fmt.Errorf ( "failed to read volume descriptor at sector %d",
@@ -608,8 +622,10 @@ func (self *ISO) readDirectory( entry *_ISO_FileEntry ) (*ISO_Directory,error) {
 
   // Llig contingut
   ret.content= make([]byte,entry.size)
-  fr:= self.getFileReader ( entry.offset, entry.size, 0,
+  fr,err:= self.getFileReader ( entry.offset, entry.size, 0,
     entry.file_unit_size, entry.gap_size )
+  if err != nil { return nil,err }
+  defer fr.Close ()
   if nb,err:= fr.Read ( ret.content ); err != nil {
     return nil,err
   } else if uint32(nb) != entry.size {
@@ -630,7 +646,7 @@ func (self *ISO) getFileReader(
   file_unit_size uint8,
   gap_size       uint8,
 
-) *_ISO_FileReader {
+) (*_ISO_FileReader,error) {
 
   ret:= _ISO_FileReader{
     iso : self,
@@ -643,22 +659,31 @@ func (self *ISO) getFileReader(
     buf : nil,
   }
 
-  return &ret
+  var err error
+  ret.f,err= self.cd.TrackReader ( self.session, self.track, 0 )
+  if err != nil { return nil,err }
+  
+  return &ret,nil
   
 } // end getFileReader
 
 
 // Torna un punter al logical block llegit
-func (self *ISO) readLogicalBlock( logical_block uint32 ) ([]byte,error) {
+func (self *ISO) readLogicalBlock(
+
+  f             TrackReader,
+  logical_block uint32,
+
+) ([]byte,error) {
 
   
   // Llig sector
   sector:= int64(logical_block/uint32(self.PrimaryVolume.blocks_per_sec))
   if sector != self.current_sec {
-    if err:= self.f.Seek ( sector ); err != nil {
+    if err:= f.Seek ( sector ); err != nil {
       return nil,err
     }
-    if nb,err:= self.f.Read ( self.buffer[:] ); err != nil {
+    if nb,err:= f.Read ( self.buffer[:] ); err != nil {
       return nil,err
     } else if nb != LOGICAL_SECTOR_SIZE {
       return nil,fmt.Errorf ( "failed to read sector %d", sector )
@@ -725,8 +750,13 @@ type ISO_DirectoryIter struct {
 }
 
 
-func (self *ISO_DirectoryIter) End() (end bool) {
+func (self *ISO_DirectoryIter) DateTime() *ISO_DateTimeRecord {
+  return &self.e.recording_date_time
+} // end DateTime
 
+
+func (self *ISO_DirectoryIter) End() (end bool) {
+  
   if len(self.p)==0 || self.p[0]==0 {
     end= true
   } else {
@@ -739,21 +769,43 @@ func (self *ISO_DirectoryIter) End() (end bool) {
 
 
 func (self *ISO_DirectoryIter) Flags() uint8 { return self.e.flags }
+
+func (self *ISO_DirectoryIter) GetDirectory() (*ISO_Directory,error) {
+
+
+  if (self.Flags()&FILE_FLAGS_DIRECTORY)==0 {
+    return nil,fmt.Errorf ( "trying to access regular file '%s' as directory",
+      self.Id () )
+  }
+  
+  return self.dir.iso.readDirectory ( &self.e )
+  
+} // end GetDirectory
+
+
+func (self *ISO_DirectoryIter) GetFileReader() (*_ISO_FileReader,error) {
+  return self.dir.iso.getFileReader ( self.e.offset, self.e.size, 0,
+    self.e.file_unit_size, self.e.gap_size )
+} // end GetFileReader
+
+
 func (self *ISO_DirectoryIter) Id() string { return self.e.id }
 
 
 func (self *ISO_DirectoryIter) Next() error {
-
+  
   if self.End () {
     return errors.New ( "reached end of directory entries" )
   }
-
+  
   // Mou al següent
   self.p= self.p[uint8(self.p[0]):]
-  if err:= self.e.read ( self.p ); err != nil {
-    return err
+  if !self.End () {
+    if err:= self.e.read ( self.p ); err != nil {
+      return err
+    }
   }
-
+  
   return nil
   
 } // end Next

@@ -24,10 +24,12 @@
 package imgs
 
 import (
+  "errors"
   "fmt"
   "io"
   
   "github.com/adriagipas/imgcp/cdread"
+  "github.com/adriagipas/imgcp/utils"
 )
 
 
@@ -45,11 +47,11 @@ type _ISO_9660 struct {
 }
 
 
-func newISO_9660( f cdread.TrackReader ) (*_ISO_9660,error) {
+func newISO_9660( cd cdread.CD, session int, track int ) (*_ISO_9660,error) {
   
   ret:= _ISO_9660{}
   var err error
-  ret.iso,err= cdread.ReadISO ( f )
+  ret.iso,err= cdread.ReadISO ( cd, session, track )
   if err != nil { return nil,err }
 
   return &ret,nil
@@ -142,3 +144,155 @@ func (self *_ISO_9660) PrintInfo( file io.Writer, prefix string ) error {
   return nil
   
 } // end PrintInfo
+
+
+func (self *_ISO_9660) GetRootDirectory() (Directory,error) {
+
+  ret:= _ISO_9660_Directory{}
+  var err error
+  ret.dir,err= self.iso.Root ()
+  if err != nil { return nil,err }
+  
+  return &ret,nil
+  
+} // end GetRootDirectory
+
+
+/*************/
+/* DIRECTORY */
+/*************/
+
+type _ISO_9660_Directory struct {
+  dir *cdread.ISO_Directory
+}
+
+
+func (self *_ISO_9660_Directory) Begin() (DirectoryIter,error) {
+
+
+  tmp,err:= self.dir.Begin ()
+  if err != nil { return nil,err }
+  ret:= _ISO_9660_DirIter{
+    ISO_DirectoryIter : *tmp,
+  }
+
+  return &ret,nil
+  
+} // end Begin
+
+
+func (self *_ISO_9660_Directory) MakeDir(name string) (Directory,error) {
+  return nil,errors.New ( "Make directory not implemented for ISO 9660"+
+    " image files")
+} // end MakeDir
+
+
+func (self *_ISO_9660_Directory) GetFileWriter(name string) (FileWriter,error) {
+  return nil,errors.New ( "Writing a file not implemented for ISO 9660"+
+    " image files")
+} // end GetFileWriter
+
+
+type _ISO_9660_DirIter struct {
+  cdread.ISO_DirectoryIter
+}
+
+
+func (self *_ISO_9660_DirIter) CompareToName(name string) bool {
+  return name == self.GetName ()
+} // end CompareToName
+
+
+func (self *_ISO_9660_DirIter) GetDirectory() (Directory,error) {
+
+  ret:= _ISO_9660_Directory{}
+  var err error
+  ret.dir,err= self.ISO_DirectoryIter.GetDirectory ()
+  if err != nil { return nil,err }
+  
+  return &ret,nil
+  
+} // end GetDirectory
+
+
+func (self *_ISO_9660_DirIter) GetFileReader() (FileReader,error) {
+  return self.ISO_DirectoryIter.GetFileReader ()
+} // end GetFileReader
+
+
+func (self *_ISO_9660_DirIter) GetName() string {
+  return self.Id ()
+} // end GetName
+
+
+func (self *_ISO_9660_DirIter) List( file io.Writer ) error {
+
+  P:= func(args... any) {
+    fmt.Fprint ( file, args... )
+  }
+  F:= func(format string,args... any) {
+    fmt.Fprintf ( file, format, args... )
+  }
+  
+  // Flags.
+  flags:= self.Flags ()
+  if (flags&cdread.FILE_FLAGS_DIRECTORY) != 0 { P("d") } else { P("-") }
+  if (flags&cdread.FILE_FLAGS_EXISTENCE) != 0 { P("h") } else { P("-") }
+  if (flags&cdread.FILE_FLAGS_ASSOCIATED_FILE) != 0 { P("s") } else { P("-") }
+  P("  ")
+
+  // Grandària
+  size := utils.NumBytesToStr ( uint64(self.Size ()) )
+  for i := 0; i < 10-len(size); i++ {
+    P(" ")
+  }
+  P(size,"  ")
+
+  // Date
+  dt:= self.DateTime ()
+  if !dt.Empty {
+    F("%02d/%02d/%04d  ",dt.Day,dt.Month,dt.Year)
+  } else {
+    P("??/??/????  ")
+  }
+
+  // Time
+  if !dt.Empty {
+    F("%02d:%02d:%02d (GMT %-02d)  ",dt.Hour,dt.Minute,dt.Second,dt.GMT)
+  } else {
+    P("??:??:?? (GMT  ??)  ")
+  }
+
+  // Nom
+  P(self.GetName ())
+
+  P("\n")
+
+  return nil
+  
+} // end List
+
+
+func (self *_ISO_9660_DirIter) Remove() error {
+  return errors.New ( "Remove file not implemented for ISO 9660 images" )
+} // end Remove
+
+
+func (self *_ISO_9660_DirIter) Type() int {
+
+  var ret int
+  flags:= self.Flags ()
+  if (flags&cdread.FILE_FLAGS_DIRECTORY) != 0 {
+    name:= self.GetName ()
+    if name == "." || name == ".." {
+      ret= DIRECTORY_ITER_TYPE_DIR_SPECIAL
+    } else {
+      ret= DIRECTORY_ITER_TYPE_DIR
+    }
+  } else {
+    ret= DIRECTORY_ITER_TYPE_FILE
+  }
+
+  return ret
+  
+} // end Type

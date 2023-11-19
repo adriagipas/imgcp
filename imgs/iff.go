@@ -289,7 +289,7 @@ func (self *_IFF_Directory) MakeDir(name string) (Directory,error) {
 
 
 func (self *_IFF_Directory) GetFileWriter(name string) (FileWriter,error) {
-  return nil,errors.New ( "Make directory not implemented for Interchange"+
+  return nil,errors.New ( "Writing a file not implemented for Interchange"+
     " Format Files (IFF)")
 } // end GetFileWriter
 

@@ -128,14 +128,7 @@ func (self *_CD) PrintInfo( file io.Writer, prefix string ) error {
       // Si és ISO imprimeix la info
       if track.Type != cdread.TRACK_TYPE_AUDIO &&
         track.Type != cdread.TRACK_TYPE_UNK {
-
-        // Obté reader
-        tr,err:= self.cd.TrackReader ( s, t, 0 )
-        if err != nil { return err }
-        defer tr.Close ()
-        
-        // Obté iso reader
-        if iso,err:= newISO_9660 ( tr ); err == nil {
+        if iso,err:= newISO_9660 ( self.cd, s, t ); err == nil {
           P(file,"")
           iso.PrintInfo ( file, prefix+"        " )
         }
@@ -204,7 +197,7 @@ func (self *_CD_SessionsDir) MakeDir( name string ) (Directory,error) {
 
 
 func (self *_CD_SessionsDir) GetFileWriter(name string) (FileWriter,error) {
-  return nil,errors.New ( "Make directory not implemented for CD images" )
+  return nil,errors.New ( "Writing a file not implemented for CD images" )
 } // end GetFileWriter
 
 
@@ -389,16 +382,11 @@ func (self *_CD_TracksDirIter) End() bool {
 
 func (self *_CD_TracksDirIter) GetDirectory() (Directory,error) {
 
-  /*
-  ret:= _CD_TracksDir{
-    cd : self.dir.cd,
-    cd_info : self.dir.cd_info,
-    sess : self.current_sess,
-  }
+  iso,err:= newISO_9660 ( self.dir.cd, self.dir.sess, self.current_track )
+  if err != nil { return nil,err }
+
+  return iso.GetRootDirectory ( )
   
-  return &ret,nil
-  */
-  return nil,errors.New("TODO - _CD_TracksDirIter.GetDirectory")
 } // end GetDirectory
 
 
