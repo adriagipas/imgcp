@@ -59,6 +59,20 @@ func newISO_9660( cd cdread.CD, session int, track int ) (*_ISO_9660,error) {
 } // end newISO_9660
 
 
+func newISO_9660_from_filename( file_name string ) (*_ISO_9660,error) {
+
+  cd,err:= cdread.Open ( file_name )
+  if err != nil { return nil,err }
+  info:= cd.Info ()
+  if len(info.Sessions)>1 || len(info.Tracks)>1 {
+    return nil,fmt.Errorf ( "'%s' is not a ISO 9660 image file", file_name )
+  }
+
+  return newISO_9660 ( cd, 0, 0 )
+  
+} // end newISO_9660_from_filename
+
+
 func (self *_ISO_9660) PrintInfo( file io.Writer, prefix string ) error {
 
   // Preparació

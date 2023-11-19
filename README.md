@@ -7,6 +7,8 @@
  - FAT12
  - FAT16
  - Interchange File Format (IFF) files (*read only*)
+ - ISO 9660 (*read only*)
+ - CD images (CUE/BIN) (*read only*)
 
 Apart from copying files, **imgcp** also implements other useful operations:
 

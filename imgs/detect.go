@@ -41,6 +41,7 @@ const TYPE_FAT16        = 3
 const TYPE_LOCAL_FOLDER = 4
 const TYPE_IFF          = 5
 const TYPE_CD           = 6
+const TYPE_ISO9660      = 7
 
 
 /************/
@@ -76,8 +77,19 @@ func Detect(file_name string) (int,error) {
 func detect_cd( file_name string ) (int,error) {
 
   // Intenta obrir com si fora un CD
-  _,err:= cdread.Open ( file_name )
+  cd,err:= cdread.Open ( file_name )
   if err != nil { return TYPE_UNK,nil }
+
+  // Intenta ISO
+  info:= cd.Info ()
+  if len(info.Sessions)==1 && len(info.Tracks)==1 {
+    _,err:= cdread.ReadISO ( cd, 0, 0 )
+    if err != nil {
+      return TYPE_CD,nil
+    } else {
+      return TYPE_ISO9660,nil
+    }
+  }
   
   return TYPE_CD,nil
   

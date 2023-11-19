@@ -25,14 +25,14 @@ package utils;
 
 import "fmt"
 
-const VERSION = "1.0.0"
+const VERSION = "1.1.0"
 
 func PrintVersion() {
 
   P := fmt.Println
 
   P("imgcp "+VERSION)
-  P("Copyright (C) 2022 Adrià Giménez Pastor")
+  P("Copyright (C) 2022-2023 Adrià Giménez Pastor")
   P("License GPLv3+: GNU GPL version 3 or later "+
     "<https://gnu.org/licenses/gpl.html>.")
   P("This is free software: you are free to change and redistribute it.")
