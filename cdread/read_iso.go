@@ -26,6 +26,7 @@ package cdread
 import (
   "errors"
   "fmt"
+  "io"
   "strings"
 )
 
@@ -38,6 +39,8 @@ import (
 
 const LOGICAL_SECTOR_SIZE = 2048
 
+
+// FUNCIONS ////////////////////////////////////////////////////////////////////
 
 func parse_date_time( data []byte, dt *ISO_DateTime ) {
 
@@ -88,6 +91,52 @@ func parse_date_time( data []byte, dt *ISO_DateTime ) {
 } // end parse_date_time
 
 
+func parse_date_time_record( data []byte, dt *ISO_DateTimeRecord ) error {
+
+  // Comprova si està buit
+  dt.Empty= true
+  for _,v := range data {
+    if v != 0 {
+      dt.Empty= false
+      break
+    }
+  }
+  if dt.Empty { return nil }
+
+  // Ompli
+  dt.Year= 1900 + int(uint32(uint8(data[0])))
+  dt.Month= uint8(data[1])
+  if dt.Month < 1 || dt.Month > 12 {
+    return fmt.Errorf ( "error while reading data and time record: "+
+      "wrong month value (%d)", dt.Month )
+  }
+  dt.Day= uint8(data[2])
+  if dt.Day < 1 || dt.Day > 31 {
+    return fmt.Errorf ( "error while reading data and time record: "+
+      "wrong day value (%d)", dt.Day )
+  }
+  dt.Hour= uint8(data[3])
+  if dt.Hour > 23 {
+    return fmt.Errorf ( "error while reading data and time record: "+
+      "wrong hour value (%d)", dt.Hour )
+  }
+  dt.Minute= uint8(data[4])
+  if dt.Minute > 59 {
+    return fmt.Errorf ( "error while reading data and time record: "+
+      "wrong minute value (%d)", dt.Minute )
+  }
+  dt.Second= uint8(data[5])
+  if dt.Second > 59 {
+    return fmt.Errorf ( "error while reading data and time record: "+
+      "wrong second value (%d)", dt.Second )
+  }
+  dt.GMT= int(data[6])-48
+  
+  return nil
+  
+} // end parse_date_time_record
+
+
 func parse_int16_LSB_MSB(data []byte) uint16 {
   return uint16(data[0]) |
     (uint16(data[1])<<8)
@@ -100,6 +149,331 @@ func parse_int32_LSB_MSB(data []byte) uint32 {
     (uint32(data[2])<<16) |
     (uint32(data[3])<<24)
 } // end parse_int32_LSB_MSB
+
+
+// ISO FILE ENTRY //////////////////////////////////////////////////////////////
+
+type _ISO_FileEntry struct {
+  
+  recording_date_time ISO_DateTimeRecord
+  offset              uint32 // Logical block on comença
+  size                uint32 // Grandària
+  flags               uint8
+  file_unit_size      uint8 // Grandària File Unit en LB. 0 -> no interleave
+  gap_size            uint8 // Si interleave, grandària del gap
+  volume              uint16
+  id                  string
+  
+}
+
+func (self *_ISO_FileEntry) read( data []byte ) error {
+
+  // Longitut
+  if len(data) == 0 {
+    return errors.New ( "trying to load an empty file entry record" )
+  }
+  len_dr:= uint8(data[0])
+  if len_dr<34 {
+    return fmt.Errorf ( "wrong directory entry format: LEN-DR = %d", len_dr )
+  }
+
+  // Extended attribute record length
+  eattr_len:= uint8(data[1])
+  if eattr_len != 0 {
+    return errors.New ( "TODO - Extended Attribute Record Length" )
+  }
+
+  // Posició i grandària del Extent
+  self.offset= parse_int32_LSB_MSB ( data[2:10] )
+  self.size= parse_int32_LSB_MSB ( data[10:18] )
+  
+  // Recording Date and Time
+  if err:= parse_date_time_record ( data[18:25],
+    &self.recording_date_time ); err != nil {
+    return err
+  }
+  
+  // Flags
+  self.flags= uint8(data[25])
+  if (self.flags&FILE_FLAGS_MULTIEXTENT)!=0 {
+    return errors.New ( "TODO - Multiextent" )
+  }
+  
+  // Unit size i interlave
+  self.file_unit_size= uint8(data[26])
+  self.gap_size= uint8(data[27])
+
+  // Volume
+  self.volume= parse_int16_LSB_MSB ( data[28:32] )
+
+  // Identificador
+  file_size:= uint8(data[32])
+  if file_size == 0 {
+    return errors.New (
+      "trying to load a file entry record without identifier" )
+  } else if file_size == 1 &&
+    (self.flags&FILE_FLAGS_DIRECTORY)!= 0 &&
+    (data[33] == 0 || data[33] == 1 ) {
+    if data[33] == 0 {
+      self.id= "."
+    } else {
+      self.id= ".."
+    }
+  } else {
+    self.id= string(data[33:33+file_size])
+  }
+  
+  return nil
+  
+} // end read
+
+
+// ISO FILE READER /////////////////////////////////////////////////////////////
+
+type _ISO_FileReader struct {
+
+  iso             *ISO
+  current_lb      uint32
+  offset          uint32 // Offset én bytes inicial, típicament 0
+  remain          uint32 // Bytes per llegir
+  file_unit_size  uint8
+  gap_size        uint8
+  current_file_lb uint8
+  buf             []byte
+  
+}
+
+
+func (self *_ISO_FileReader) loadBufNoInterleave() error {
+
+  var err error
+  self.buf,err= self.iso.readLogicalBlock ( self.current_lb )
+  if err != nil { return err }
+  self.current_lb++
+
+  return nil
+  
+} // end loadBufNoInterleave
+
+
+func (self *_ISO_FileReader) loadBufInterleave() error {
+  return errors.New ( "TODO - ISO_FileReader.loadBufInteleave" )
+} // end loadBufInterleave
+
+
+func (self *_ISO_FileReader) loadBuf() error {
+  if self.file_unit_size == 0 {
+    return self.loadBufNoInterleave ()
+  } else {
+    return self.loadBufInterleave ()
+  }
+} // end loadBuf
+
+
+func (self *_ISO_FileReader) Read( data []byte) (n int,err error) {
+
+  // Prepara
+  if self.remain == 0 { return 0,io.EOF }
+  n,err= 0,nil
+  
+  // Ignora offset
+  for self.offset > 0 {
+    
+    // Obté dades
+    if len(self.buf)==0 {
+      err= self.loadBuf ()
+      if err != nil { return }
+    }
+
+    // Ignora bytes
+    if self.offset>uint32(len(self.buf)) {
+      self.offset-= uint32(len(self.buf))
+      self.buf= nil
+    } else {
+      self.buf= self.buf[self.offset:]
+      self.offset= 0
+    }
+    
+  }
+
+  // Llig.
+  var nbytes uint32
+  var buf_size uint32
+  var want_size uint32
+  for len(data)>0 && self.remain>0 {
+
+    // Obté dades
+    if len(self.buf)==0 {
+      err= self.loadBuf ()
+      if err != nil { return }
+    }
+    
+    // Bytes a llegir
+    buf_size= uint32(len(self.buf))
+    if self.remain>buf_size {
+      nbytes= buf_size
+    } else {
+      nbytes= self.remain
+    }
+    want_size= uint32(len(data))
+    if nbytes>want_size {
+      nbytes= want_size
+    }
+
+    // Llig
+    copy(data[:nbytes],self.buf[:nbytes])
+    data= data[nbytes:]
+    self.buf= self.buf[nbytes:]
+    self.remain-= nbytes
+    n+= int(nbytes)
+    
+  }
+
+  return
+  
+} // end Read
+
+
+
+
+/****************/
+/* PART PÚBLICA */
+/****************/
+
+// ISO ////////////////////////////////////////////////////////////////////////
+
+type ISO_DateTime struct {
+
+  Year    string
+  Month   string
+  Day     string
+  Hour    string
+  Minute  string
+  Second  string
+  HSecond string
+  GMT     int  // Intervals de 15 minuts des de -48 (oest) fins 52 (est)
+  Empty   bool
+  
+}
+
+type ISO_DateTimeRecord struct {
+
+  Year   int
+  Month  uint8
+  Day    uint8
+  Hour   uint8
+  Minute uint8
+  Second uint8
+  GMT    int
+  Empty  bool
+  
+}
+
+type ISO_PrimaryVolume struct {
+
+  // Part pública
+  Version                uint8
+  SystemIdentifier       string
+  VolumeIdentifier       string
+  VolumeSpaceSize        uint32 // Number of Logical Blocks in which the
+                                // volume is recorded.
+  VolumeSetSize          uint16 // The size of the set in this logical
+                                // volume (number of disks).
+  VolumeSequenceNumber   uint16 // The number of this disk in the Volume Set.
+  LogicalBlockSize       uint16 // The size in bytes of a logical
+                                // block. NB: This means that a
+                                // logical block on a CD could be
+                                // something other than 2 KiB!
+  VolumeSetIdentifier    string // Identifier of the volume set of
+                                // which this volume is a member.
+  PublisherIdentifier    string // The volume publisher. For extended
+                                // publisher information, the first
+                                // byte should be 0x5F, followed by
+                                // the filename of a file in the root
+                                // directory. If not specified, all
+                                // bytes should be 0x20.
+  DataPreparerIdentifier string // The identifier of the person(s) who
+                                // prepared the data for this
+                                // volume. For extended preparation
+                                // information, the first byte should
+                                // be 0x5F, followed by the filename
+                                // of a file in the root directory. If
+                                // not specified, all bytes should be
+                                // 0x20.
+  ApplicationIdentifier  string  // Identifies how the data are
+                                 // recorded on this volume. For
+                                 // extended information, the first
+                                 // byte should be 0x5F, followed by
+                                 // the filename of a file in the root
+                                 // directory. If not specified, all
+                                 // bytes should be 0x20.  IGNORE coses
+                                 // de la Path Table
+  CopyrightFileIdentifier string // Filename of a file in the root
+                                 // directory that contains copyright
+                                 // information for this volume
+                                 // set. If not specified, all bytes
+                                 // should be 0x20.
+  AbstractFileIdentifier  string // Filename of a file in the root
+                                 // directory that contains abstract
+                                 // information for this volume
+                                 // set. If not specified, all bytes
+                                 // should be 0x20.
+  BiblioFileIdentifier    string // Filename of a file in the root
+                                 // directory that contains
+                                 // bibliographic information for this
+                                 // volume set. If not specified, all
+                                 // bytes should be 0x20.
+  VolumeCreation          ISO_DateTime
+  VolumeModification      ISO_DateTime
+  VolumeExpiration        ISO_DateTime
+  VolumeEffective         ISO_DateTime
+  FileStructureVersion    uint8
+  
+  // Part privada
+  root_dir_record [34]byte
+  blocks_per_sec  int
+  
+}
+
+const (
+
+  FILE_FLAGS_EXISTENCE       = 0x01
+  FILE_FLAGS_DIRECTORY       = 0x02
+  FILE_FLAGS_ASSOCIATED_FILE = 0x04
+  FILE_FLAGS_RECORD          = 0x08
+  FILE_FLAGS_PROTECTED       = 0x10
+  FILE_FLAGS_MULTIEXTENT     = 0x80
+  
+)
+
+type ISO struct {
+
+  // Públic
+  PrimaryVolume ISO_PrimaryVolume
+  
+  // Privat
+  f           TrackReader
+  current_sec int64
+  buffer      [LOGICAL_SECTOR_SIZE]byte
+  
+}
+
+
+func ReadISO( f TrackReader ) (*ISO,error) {
+
+  ret:= ISO{
+    f : f,
+    current_sec : -1,
+  }
+  
+  // Parse volume descriptors.
+  if err:= ret.readVolumeDescriptors (); err != nil {
+    return nil,err
+  }
+  
+  return &ret,nil
+  
+} // end ReadISO
 
 
 func (self *ISO) readVolumeDescriptors() error {
@@ -174,10 +548,18 @@ func (self *ISO) readPrimaryVolume( data []byte ) error {
   self.PrimaryVolume.VolumeSetSize= parse_int16_LSB_MSB ( data[120:124] )
   self.PrimaryVolume.VolumeSequenceNumber= parse_int16_LSB_MSB ( data[124:128] )
   self.PrimaryVolume.LogicalBlockSize= parse_int16_LSB_MSB ( data[128:132] )
+  if self.PrimaryVolume.LogicalBlockSize<512 ||
+    self.PrimaryVolume.LogicalBlockSize>LOGICAL_SECTOR_SIZE ||
+    LOGICAL_SECTOR_SIZE%self.PrimaryVolume.LogicalBlockSize!=0 {
+    return fmt.Errorf ( "wrong Logical Block Size: %d",
+      self.PrimaryVolume.LogicalBlockSize )
+  }
+  self.PrimaryVolume.blocks_per_sec= 
+    LOGICAL_SECTOR_SIZE/int(uint32(self.PrimaryVolume.LogicalBlockSize))
 
   // Root directory record
   copy(self.PrimaryVolume.root_dir_record[:],data[156:190])
-
+  
   // Més identificadors
   self.PrimaryVolume.VolumeSetIdentifier=
     strings.TrimRight ( string(data[190:318]), " " )
@@ -205,116 +587,176 @@ func (self *ISO) readPrimaryVolume( data []byte ) error {
   
   return nil
   
-} // end error
+} // end readPrimaryVolume
 
 
+func (self *ISO) readDirectory( entry *_ISO_FileEntry ) (*ISO_Directory,error) {
 
+  // Inicialitza
+  ret:= ISO_Directory{
+    iso : self,
+  }
 
-/****************/
-/* PART PÚBLICA */
-/****************/
+  // Comprovacions i carrega dades
+  if (entry.flags&FILE_FLAGS_DIRECTORY)==0 {
+    return nil,errors.New ( "failed to load directory entry: it "+
+      "is marked as not directory" )
+  }
+  if entry.size == 0 {
+    return nil,errors.New ( "failed to load directory entry: empty content" )
+  }
 
-type ISO_DateTime struct {
-
-  Year    string
-  Month   string
-  Day     string
-  Hour    string
-  Minute  string
-  Second  string
-  HSecond string
-  GMT     int  // Intervals de 15 minuts des de -48 (oest) fins 52 (est)
-  Empty   bool
-  
-}
-
-type ISO_PrimaryVolume struct {
-
-  // Part pública
-  Version                uint8
-  SystemIdentifier       string
-  VolumeIdentifier       string
-  VolumeSpaceSize        uint32 // Number of Logical Blocks in which the
-                                // volume is recorded.
-  VolumeSetSize          uint16 // The size of the set in this logical
-                                // volume (number of disks).
-  VolumeSequenceNumber   uint16 // The number of this disk in the Volume Set.
-  LogicalBlockSize       uint16 // The size in bytes of a logical
-                                // block. NB: This means that a
-                                // logical block on a CD could be
-                                // something other than 2 KiB!
-  VolumeSetIdentifier    string // Identifier of the volume set of
-                                // which this volume is a member.
-  PublisherIdentifier    string // The volume publisher. For extended
-                                // publisher information, the first
-                                // byte should be 0x5F, followed by
-                                // the filename of a file in the root
-                                // directory. If not specified, all
-                                // bytes should be 0x20.
-  DataPreparerIdentifier string // The identifier of the person(s) who
-                                // prepared the data for this
-                                // volume. For extended preparation
-                                // information, the first byte should
-                                // be 0x5F, followed by the filename
-                                // of a file in the root directory. If
-                                // not specified, all bytes should be
-                                // 0x20.
-  ApplicationIdentifier  string  // Identifies how the data are
-                                 // recorded on this volume. For
-                                 // extended information, the first
-                                 // byte should be 0x5F, followed by
-                                 // the filename of a file in the root
-                                 // directory. If not specified, all
-                                 // bytes should be 0x20.  IGNORE coses
-                                 // de la Path Table
-  CopyrightFileIdentifier string // Filename of a file in the root
-                                 // directory that contains copyright
-                                 // information for this volume
-                                 // set. If not specified, all bytes
-                                 // should be 0x20.
-  AbstractFileIdentifier  string // Filename of a file in the root
-                                 // directory that contains abstract
-                                 // information for this volume
-                                 // set. If not specified, all bytes
-                                 // should be 0x20.
-  BiblioFileIdentifier    string // Filename of a file in the root
-                                 // directory that contains
-                                 // bibliographic information for this
-                                 // volume set. If not specified, all
-                                 // bytes should be 0x20.
-  VolumeCreation          ISO_DateTime
-  VolumeModification      ISO_DateTime
-  VolumeExpiration        ISO_DateTime
-  VolumeEffective         ISO_DateTime
-  FileStructureVersion    uint8
-  
-  // Part privada
-  root_dir_record [34]byte
-  
-}
-
-type ISO struct {
-
-  // Públic
-  PrimaryVolume ISO_PrimaryVolume
-  
-  // Privat
-  f TrackReader
-  
-}
-
-
-func ReadISO( f TrackReader ) (*ISO,error) {
-
-  ret:= ISO{
-    f : f,
+  // Llig contingut
+  ret.content= make([]byte,entry.size)
+  fr:= self.getFileReader ( entry.offset, entry.size, 0,
+    entry.file_unit_size, entry.gap_size )
+  if nb,err:= fr.Read ( ret.content ); err != nil {
+    return nil,err
+  } else if uint32(nb) != entry.size {
+    return nil,fmt.Errorf ( "failed to load directory content: expected "+
+      "%d bytes but instead %d bytes were read", entry.size, nb )
   }
   
-  // Parse volume descriptors.
-  if err:= ret.readVolumeDescriptors (); err != nil {
+  return &ret,nil
+  
+} // end readDirectory
+
+
+func (self *ISO) getFileReader(
+
+  logical_block  uint32,
+  nbytes         uint32,
+  offset_bytes   uint32,
+  file_unit_size uint8,
+  gap_size       uint8,
+
+) *_ISO_FileReader {
+
+  ret:= _ISO_FileReader{
+    iso : self,
+    current_lb : logical_block,
+    offset : offset_bytes,
+    remain : nbytes,
+    file_unit_size : file_unit_size,
+    gap_size : gap_size,
+    current_file_lb : 0,
+    buf : nil,
+  }
+
+  return &ret
+  
+} // end getFileReader
+
+
+// Torna un punter al logical block llegit
+func (self *ISO) readLogicalBlock( logical_block uint32 ) ([]byte,error) {
+
+  
+  // Llig sector
+  sector:= int64(logical_block/uint32(self.PrimaryVolume.blocks_per_sec))
+  if sector != self.current_sec {
+    if err:= self.f.Seek ( sector ); err != nil {
+      return nil,err
+    }
+    if nb,err:= self.f.Read ( self.buffer[:] ); err != nil {
+      return nil,err
+    } else if nb != LOGICAL_SECTOR_SIZE {
+      return nil,fmt.Errorf ( "failed to read sector %d", sector )
+    }
+    self.current_sec= sector
+  }
+
+  // Selecciona bloc
+  block:= logical_block%uint32(self.PrimaryVolume.blocks_per_sec)
+  ret:= self.buffer[uint32(self.PrimaryVolume.LogicalBlockSize)*block:
+    uint32(self.PrimaryVolume.LogicalBlockSize)*(block+1)]
+
+  return ret,nil
+  
+} // end readLogicalBlock
+
+
+// Torna el directori arrel.
+func (self *ISO) Root() (*ISO_Directory,error) {
+
+  var entry _ISO_FileEntry
+  if err:= entry.read ( self.PrimaryVolume.root_dir_record[:] ); err != nil {
+    return nil,err
+  }
+  
+  return self.readDirectory ( &entry )
+  
+} // end Root
+
+
+// ISO DIRECTORY //////////////////////////////////////////////////////////////
+
+type ISO_Directory struct {
+
+  iso     *ISO
+  content []byte
+  
+}
+
+func (self *ISO_Directory) Begin() (*ISO_DirectoryIter,error) {
+
+  ret:= ISO_DirectoryIter{
+    dir : self,
+    p : self.content,
+  }
+  if err:= ret.e.read ( ret.p ); err != nil {
     return nil,err
   }
   
   return &ret,nil
   
-} // end ReadISO
+} // end Begin
+
+
+// ISO DIRECTORY ITER //////////////////////////////////////////////////////////
+
+type ISO_DirectoryIter struct {
+
+  // PRIVAT!!!
+  dir *ISO_Directory
+  e   _ISO_FileEntry
+  p   []byte
+  
+}
+
+
+func (self *ISO_DirectoryIter) End() (end bool) {
+
+  if len(self.p)==0 || self.p[0]==0 {
+    end= true
+  } else {
+    end= false
+  }
+
+  return
+  
+} // end End
+
+
+func (self *ISO_DirectoryIter) Flags() uint8 { return self.e.flags }
+func (self *ISO_DirectoryIter) Id() string { return self.e.id }
+
+
+func (self *ISO_DirectoryIter) Next() error {
+
+  if self.End () {
+    return errors.New ( "reached end of directory entries" )
+  }
+
+  // Mou al següent
+  self.p= self.p[uint8(self.p[0]):]
+  if err:= self.e.read ( self.p ); err != nil {
+    return err
+  }
+
+  return nil
+  
+} // end Next
+
+
+func (self *ISO_DirectoryIter) Size() uint32 { return self.e.size }

@@ -125,7 +125,22 @@ func (self *_CD) PrintInfo( file io.Writer, prefix string ) error {
       // Salt de línia
       P(file,"")
 
-      // NOTA!!! TODO!!! Faltaria provar a imprimir informació ISO.
+      // Si és ISO imprimeix la info
+      if track.Type != cdread.TRACK_TYPE_AUDIO &&
+        track.Type != cdread.TRACK_TYPE_UNK {
+
+        // Obté reader
+        tr,err:= self.cd.TrackReader ( s, t, 0 )
+        if err != nil { return err }
+        defer tr.Close ()
+        
+        // Obté iso reader
+        if iso,err:= newISO_9660 ( tr ); err == nil {
+          P(file,"")
+          iso.PrintInfo ( file, prefix+"        " )
+        }
+        
+      }
       
     }
   }
@@ -373,6 +388,7 @@ func (self *_CD_TracksDirIter) End() bool {
 
 
 func (self *_CD_TracksDirIter) GetDirectory() (Directory,error) {
+
   /*
   ret:= _CD_TracksDir{
     cd : self.dir.cd,
