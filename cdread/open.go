@@ -32,7 +32,9 @@ func Open( file_name string ) (CD,error) {
 
   // NOTA! Tenint en compte com és cada format crec que l'òptim és
   // directament intentar llegir-los seguint el següent ordre.
-  cd,err:= OpenIso ( file_name )
+  cd,err:= OpenMds ( file_name )
+  if err == nil { return cd,nil }
+  cd,err= OpenIso ( file_name )
   if err == nil { return cd,nil }
   cd,err= OpenCue ( file_name )
   
