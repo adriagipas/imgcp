@@ -4,7 +4,7 @@
   disk images (floppies, hard drives, archive files, etc). Currently
   supported formats are:
 
- - CD images (CUE/BIN) (*read only*)
+ - CD images (CUE/BIN, MDS/MDF) (*read only*)
  - FAT12
  - FAT16
  - Interchange File Format (IFF) files (*read only*)
