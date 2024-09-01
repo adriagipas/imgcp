@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Adrià Giménez Pastor.
+ * Copyright 2022-2024 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -25,6 +25,7 @@
 package utils;
 
 import (
+  "errors"
   "os"
 )
 
@@ -41,6 +42,12 @@ type SubfileReader struct {
   pos         int64 // Posició actual
   
 }
+
+
+func (self *SubfileReader) Close() error {
+  self.f.Close ()
+  return nil
+} // end Close
 
 
 func (self *SubfileReader) Read(buf []byte) (int,error) {
@@ -71,10 +78,19 @@ func (self *SubfileReader) Read(buf []byte) (int,error) {
 } // end Read
 
 
-func (self *SubfileReader) Close() error {
-  self.f.Close ()
-  return nil
-} // end Close
+func (self *SubfileReader) Seek( offset int64, whence int ) (int64,error) {
+
+  if whence != 0 {
+    return -1,errors.New ( "SubfileReader.Seek only supports whence=0" )
+  }
+  if offset < 0 || offset >= self.data_length {
+    return -1,errors.New ( "offset out of range" )
+  }
+  self.pos= self.data_offset + offset
+
+  return offset,nil
+  
+} // end Seek
 
 
 func NewSubfileReader(

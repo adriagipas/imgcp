@@ -255,3 +255,17 @@ func (self *NCCH) GetExeFS() (*ExeFS,error) {
     )
   }
 } // end GetExeFS
+
+
+// Si no en té torna nil sense error.
+func (self *NCCH) GetRomFS() (*RomFS_Directory,error) {
+  if self.Header.RomFS.Size == 0 {
+    return nil,nil
+  } else {
+    return openRomFS (
+      self.file_name,
+      self.offset + self.Header.RomFS.Offset,
+      self.Header.RomFS.Size,
+    )
+  }
+} // end GetRomFS
