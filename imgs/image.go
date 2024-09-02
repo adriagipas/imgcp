@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Adrià Giménez Pastor.
+ * Copyright 2022-2024 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -76,6 +76,9 @@ func NewImage(file_name string) (Image,error) {
 
   case TYPE_ISO9660:
     return newISO_9660_from_filename ( file_name )
+    
+  case TYPE_CCI:
+    return newCCI ( file_name )
     
   default:
     return nil,fmt.Errorf ( "Unable to detect the image type for file '%s'",

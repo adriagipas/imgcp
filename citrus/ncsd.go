@@ -158,3 +158,23 @@ func (self *NCSDHeader) Read( fd *os.File ) error {
   return nil
   
 } // end Read
+
+
+func NCSD_ptype2str( ptype int ) string {
+  
+  switch ptype {
+  case NCSD_PARTITION_TYPE_NCCH:
+    return "NCCH"
+  case NCSD_PARTITION_TYPE_MBR:
+    return "MBR"
+  case NCSD_PARTITION_TYPE_FIRM:
+    return "FIRM"
+  case NCSD_PARTITION_TYPE_GBA_SAVE:
+    return "GBA SAVE"
+  case NCSD_PARTITION_TYPE_UNUSED:
+    return "Unused"
+  default:
+    return "Unknown"
+  }
+  
+} // end NCSD_ptype2str

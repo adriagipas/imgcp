@@ -269,3 +269,31 @@ func (self *NCCH) GetRomFS() (*RomFS_Directory,error) {
     )
   }
 } // end GetRomFS
+
+
+// Si no en té torna nil sense error.
+func (self *NCCH) GetPlain() (*utils.SubfileReader,error) {
+  if self.Header.Plain.Size == 0 {
+    return nil,nil
+  } else {
+    return utils.NewSubfileReader (
+      self.file_name,
+      self.offset + self.Header.Plain.Offset,
+      self.Header.Plain.Size,
+    )
+  }
+} // end GetPlain
+
+
+// Si no en té torna nil sense error.
+func (self *NCCH) GetLogo() (*utils.SubfileReader,error) {
+  if self.Header.Logo.Size == 0 {
+    return nil,nil
+  } else {
+    return utils.NewSubfileReader (
+      self.file_name,
+      self.offset + self.Header.Logo.Offset,
+      self.Header.Logo.Size,
+    )
+  }
+} // end GetLogo

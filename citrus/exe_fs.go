@@ -27,7 +27,6 @@ import (
   "bytes"
   "errors"
   "fmt"
-  "io"
   
   "github.com/adriagipas/imgcp/utils"
 )
@@ -125,7 +124,7 @@ func newExeFS(
 } // end newExeFS
 
 
-func (self *ExeFS) Open( file *ExeFS_File ) (io.Reader,error) {
+func (self *ExeFS) Open( file *ExeFS_File ) (*utils.SubfileReader,error) {
   return utils.NewSubfileReader (
     self.file_name,
     0x200 + self.offset + int64(uint64(file.Offset)),
@@ -134,6 +133,6 @@ func (self *ExeFS) Open( file *ExeFS_File ) (io.Reader,error) {
 } // end ExeFS.Open
 
 
-func (self *ExeFS) OpenIndex( index int ) (io.Reader,error) {
+func (self *ExeFS) OpenIndex( index int ) (*utils.SubfileReader,error) {
   return self.Open ( &self.Files[index] )
 } // end ExeFS.OpenIndex

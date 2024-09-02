@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Adrià Giménez Pastor.
+ * Copyright 2022-2024 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -42,6 +42,7 @@ const TYPE_LOCAL_FOLDER = 4
 const TYPE_IFF          = 5
 const TYPE_CD           = 6
 const TYPE_ISO9660      = 7
+const TYPE_CCI          = 8
 
 
 /************/
@@ -194,6 +195,11 @@ func detect_h512(file_name string) (int,error) {
   if tmp := detect_FAT16 ( header, nbytes ); tmp > points {
     ret,points= TYPE_FAT16,tmp
   }
+
+  // --> CCI
+  if tmp := detect_CCI ( header, nbytes ); tmp > points {
+    ret,points= TYPE_CCI,tmp
+  }
   
   return ret,nil
   
@@ -322,3 +328,21 @@ func detect_MBR(header []byte, nbytes int64) int {
   return ret
   
 } // detect_MBR
+
+
+func detect_CCI(header []byte, nbytes int64) int {
+
+  // Magic number
+  if header[0x100]!='N' || header[0x101]!='C' ||
+    header[0x102]!='S' || header[0x103]!='D' {
+    return -1
+  }
+
+  // Tipus particions
+  if header[0x110]!=0 || header[0x111]!=0 || header[0x117]!=0 {
+    return -1
+  }
+
+  return 100 // Molt probable
+  
+} // detect_CCI
