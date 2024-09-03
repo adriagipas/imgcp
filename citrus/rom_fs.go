@@ -26,7 +26,6 @@ package citrus
 import (
   "errors"
   "fmt"
-  "io"
   
   "github.com/adriagipas/imgcp/utils"
   "golang.org/x/text/encoding/unicode"
@@ -82,7 +81,7 @@ type RomFS_File struct {
 
   // Fitxer
   offset uint64
-  size   uint64
+  Size   uint64
   
 }
 
@@ -91,10 +90,10 @@ type RomFS_File struct {
 /* FUNCIONS */
 /************/
 
-func (self *RomFS_File) Open() (io.Reader,error) {
+func (self *RomFS_File) Open() (*utils.SubfileReader,error) {
 
   offset:= _BASE_OFFSET + int64(uint64(self.file_data) + self.offset)
-  size:= int64(self.size)
+  size:= int64(self.Size)
   if offset < 0 || offset+size >= self.file_size {
     return nil,fmt.Errorf ( "File '%s' out of range (parent file)", self.Name )
   }
@@ -226,7 +225,7 @@ func newRomFS_File(
     parent_dir: parent_dir,
     sibling: sibling,
     offset: offset,
-    size: size,
+    Size: size,
   }
 
   return &ret,nil

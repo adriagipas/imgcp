@@ -213,7 +213,11 @@ func (self *_NCCH_DirIter) GetDirectory() (Directory,error) {
     },nil
     
   case _NCCH_ROMFS:
-    return nil,errors.New ( "GetDirectory ROMFS - TODO" )
+    state,err:= self.state.GetRomFS ()
+    if err != nil { return nil,err }
+    return &_RomFS{
+      state: state, // No deuria ser nil
+    },nil
     
   default:
     return nil,errors.New ( "_NCCH_DirIter.GetDirectory: WTF!!!" )
@@ -456,4 +460,178 @@ func (self *_ExeFS_DirIter) Remove() error {
 
 func (self *_ExeFS_DirIter) Type() int {
   return DIRECTORY_ITER_TYPE_FILE
+} // end Type
+
+
+/*********/
+/* ROMFS */
+/*********/
+
+// Com que és sols lectura llisc al principi el contingut.
+type _RomFS struct {
+  state *citrus.RomFS_Directory
+}
+
+func (self *_RomFS) MakeDir(name string) (Directory,error) {
+  return nil,errors.New (
+    "Make directory not implemented for NCCH.RomFS files" )
+} // end Mkdir
+
+
+func (self *_RomFS) GetFileWriter(name string) (FileWriter,error) {
+  return nil,errors.New (
+    "Writing a file not implemented for NCCH.RomFS files" )
+} // end GetFileWriter
+
+
+func (self *_RomFS) Begin() (DirectoryIter,error) {
+
+  parent,err:= self.state.Parent ()
+  if err != nil { return nil,err }
+  dirs,err:= self.state.Child ()
+  if err != nil { return nil,err }
+  files,err:= self.state.File ()
+  if err != nil { return nil,err }
+  
+  ret:= _RomFS_DirIter{
+    parent: parent,
+    dirs: dirs,
+    files: files,
+  }
+
+  return &ret,nil
+  
+} // end Begin
+
+
+/************************/
+/* ROMFS DIRECTORY ITER */
+/************************/
+
+type _RomFS_DirIter struct {
+  
+  parent *citrus.RomFS_Directory
+  dirs   *citrus.RomFS_Directory
+  files  *citrus.RomFS_File
+  
+}
+
+
+func (self *_RomFS_DirIter) CompareToName(name string) bool {
+  if self.parent != nil {
+    return name == ".."
+  } else if self.dirs != nil {
+    return name == self.dirs.Name
+  } else {
+    return name == self.files.Name
+  }
+} // end CompareToName
+
+
+func (self *_RomFS_DirIter) End() bool {
+  return self.parent==nil && self.dirs==nil && self.files==nil
+} // end End
+
+
+func (self *_RomFS_DirIter) GetDirectory() (Directory,error) {
+  if self.parent != nil {
+    return &_RomFS{state:self.parent},nil
+  } else if self.dirs != nil {
+    return &_RomFS{state:self.dirs},nil
+  } else {
+    return nil,errors.New ( "_RomFS_DirIter.GetDirectory: WTF!!!" )
+  }
+} // end GetDirectory
+
+
+func (self *_RomFS_DirIter) GetFileReader() (FileReader,error) {
+  if self.parent != nil || self.dirs != nil {
+    return nil,errors.New ( "_RomFS_DirIter.GetDirectory: WTF!!!" )
+  } else {
+    return self.files.Open ()
+  }
+} // end GetFileReader
+
+
+func (self *_RomFS_DirIter) GetName() string {
+  if self.parent != nil {
+    return ".."
+  } else if self.dirs != nil {
+    return self.dirs.Name
+  } else {
+    return self.files.Name
+  }
+} // end GetName
+
+
+func (self *_RomFS_DirIter) List( file io.Writer ) error {
+
+  // No imprimisc els ..
+  if self.parent != nil { return nil }
+  
+  P:= func(args... any) {
+    fmt.Fprint ( file, args... )
+  }
+  F:= func(format string,args... any) {
+    fmt.Fprintf ( file, format, args... )
+  }
+  
+  // És o no directori
+  if self.dirs != nil {
+    P("d")
+  } else {
+    P("-")
+  }
+  
+  P("  ")
+
+  // Grandària
+  if self.dirs != nil {
+    P("            ")
+  } else {
+    size := utils.NumBytesToStr ( uint64(self.files.Size) )
+    for i := 0; i < 10-len(size); i++ {
+      P(" ")
+    }
+    P(size,"  ")
+  }
+
+  // Nom
+  F("%s",self.GetName ())
+  
+  P("\n")
+  
+  return nil
+  
+} // end List
+
+
+func (self *_RomFS_DirIter) Next() error {
+
+  var err error= nil
+  
+  if self.parent != nil {
+    self.parent= nil
+  } else if self.dirs != nil {
+    self.dirs,err= self.dirs.Sibling ()
+  } else if self.files != nil {
+    self.files,err= self.files.Sibling ()
+  }
+  
+  return err
+  
+} // end Next
+
+
+func (self *_RomFS_DirIter) Remove() error {
+  return errors.New ( "Remove file not implemented for NCCH.RomFS files" )
+} // end Remove
+
+
+func (self *_RomFS_DirIter) Type() int {
+  if self.parent != nil || self.dirs != nil {
+    return DIRECTORY_ITER_TYPE_DIR
+  } else {
+    return DIRECTORY_ITER_TYPE_FILE
+  }
 } // end Type
