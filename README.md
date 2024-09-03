@@ -4,6 +4,7 @@
   disk images (floppies, hard drives, archive files, etc). Currently
   supported formats are:
 
+ - 3DS file formats (3DS/CCI, NCCH/CXI) (*read only*) 
  - CD images (CUE/BIN, MDS/MDF) (*read only*)
  - FAT12
  - FAT16

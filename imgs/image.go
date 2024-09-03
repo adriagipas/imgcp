@@ -80,6 +80,9 @@ func NewImage(file_name string) (Image,error) {
   case TYPE_CCI:
     return newCCI ( file_name )
     
+  case TYPE_NCCH:
+    return newNCCH_from_filename ( file_name )
+    
   default:
     return nil,fmt.Errorf ( "Unable to detect the image type for file '%s'",
       file_name)

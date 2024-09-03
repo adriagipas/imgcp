@@ -45,7 +45,7 @@ type _CCI struct {
 
 
 func newCCI( file_name string ) (*_CCI,error) {
-
+  
   ret:= _CCI{}
   var err error
   if ret.state,err= citrus.NewCCI ( file_name ); err != nil {

@@ -59,7 +59,17 @@ func newNCCH( state *citrus.NCCH ) (*_NCCH,error) {
   
   return &ret,nil
   
-} // end newCCI
+} // end newCCH
+
+
+func newNCCH_from_filename( file_name string ) (*_NCCH,error) {
+
+  state,err:= citrus.NewNCCH ( file_name )
+  if err != nil { return nil,err }
+
+  return newNCCH ( state )
+  
+} // end newNCCH_from_filename
 
 
 func (self *_NCCH) PrintInfo( file io.Writer, prefix string ) error {

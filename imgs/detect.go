@@ -43,6 +43,7 @@ const TYPE_IFF          = 5
 const TYPE_CD           = 6
 const TYPE_ISO9660      = 7
 const TYPE_CCI          = 8
+const TYPE_NCCH         = 9
 
 
 /************/
@@ -196,9 +197,14 @@ func detect_h512(file_name string) (int,error) {
     ret,points= TYPE_FAT16,tmp
   }
 
-  // --> CCI
+  // --> Citrus CCI
   if tmp := detect_CCI ( header, nbytes ); tmp > points {
     ret,points= TYPE_CCI,tmp
+  }
+
+  // --> Citrus NCCH
+  if tmp := detect_NCCH ( header, nbytes ); tmp > points {
+    ret,points= TYPE_NCCH,tmp
   }
   
   return ret,nil
@@ -346,3 +352,16 @@ func detect_CCI(header []byte, nbytes int64) int {
   return 100 // Molt probable
   
 } // detect_CCI
+
+
+func detect_NCCH(header []byte, nbytes int64) int {
+
+  // Magic number
+  if header[0x100]!='N' || header[0x101]!='C' ||
+    header[0x102]!='C' || header[0x103]!='H' {
+    return -1
+  }
+
+  return 10
+  
+} // detect_NCCH
