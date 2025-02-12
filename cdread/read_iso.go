@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Adrià Giménez Pastor.
+ * Copyright 2023-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -441,6 +441,14 @@ type ISO_PrimaryVolume struct {
   
 }
 
+type ISO_SupplementaryVolume struct {
+  ISO_PrimaryVolume
+  
+  Flags uint8 // Bit 0: 0 -> only escape sequence ISO 2375; 1 -> at
+              // least one escape sequence not ISO 2375
+  
+}
+
 const (
 
   FILE_FLAGS_EXISTENCE       = 0x01
@@ -457,6 +465,7 @@ type ISO struct {
 
   // Públic
   PrimaryVolume ISO_PrimaryVolume
+  Supplementary *ISO_SupplementaryVolume // Pot ser nil
   
   // Privat
   cd          CD
@@ -471,6 +480,7 @@ type ISO struct {
 func ReadISO( cd CD, session int, track int ) (*ISO,error) {
 
   ret:= ISO{
+    Supplementary : nil,
     cd : cd,
     session : session,
     track : track,
@@ -493,7 +503,7 @@ func ReadISO( cd CD, session int, track int ) (*ISO,error) {
 func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
 
   var buf [LOGICAL_SECTOR_SIZE]byte
-  sector,end,num_pv:= int64(0x10),false,0
+  sector,end,num_pv,num_sv:= int64(0x10),false,0,0
   for ; !end; sector++ {
 
     // Prova a llegir
@@ -511,18 +521,20 @@ func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
     switch dtype:= buf[0]; dtype {
     case 0: // Boot record
       return fmt.Errorf ( "TODO - BOOT RECORD!!!" )
-    case 1: // Primary volume
-      if num_pv == 1 {
-        return fmt.Errorf ( "found a second primary volume descriptor"+
-          " at sector %d", sector )
-      } else {
+    case 1: // Primary volume (NOTA!! Com a mínim cal 1)
+      if num_pv == 0 {
         num_pv= 1
-      }
-      if err:= self.readPrimaryVolume ( buf[:] ); err != nil {
-        return err
+        if err:= self.readPrimaryVolume ( buf[:] ); err != nil {
+          return err
+        }
       }
     case 2: // Supplementary volume
-      return errors.New ( "supplementary volume descriptor not implemented" )
+      if num_sv == 0 {
+        num_sv= 1
+        if err:= self.readSupplementaryVolume ( buf[:] ); err != nil {
+          return err
+        }
+      }
     case 3: // Volume partition
       return errors.New ( "volume partition descriptor not implemented" )
     case 255:
@@ -533,7 +545,10 @@ func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
     }
     
   }
-
+  if num_pv == 0 {
+    return errors.New ( "primary volume not found" )
+  }
+  
   return nil
   
 } // end readVolumeDescriptors
@@ -602,6 +617,83 @@ func (self *ISO) readPrimaryVolume( data []byte ) error {
   return nil
   
 } // end readPrimaryVolume
+
+
+func (self *ISO) readSupplementaryVolume( data []byte ) error {
+
+  // Signatura
+  if data[1]!='C' || data[2]!='D' || data[3]!='0' ||
+    data[4]!='0' || data[5]!='1' {
+    return errors.New ( "Volume descriptor signature 'CD001' not "+
+      "found in supplementary descriptor" )
+  }
+
+  // Reserva
+  sup:= ISO_SupplementaryVolume{}
+  
+  // Versió
+  sup.Version= uint8(data[6])
+
+  // VolumeFlags
+  sup.Flags= uint8(data[7])
+
+  // Escape sequence (ECMA-35 15.4 No acabe d'entendre)
+  //fmt.Printf("ESCAPE [%v]\n",data[88:120])
+  
+  // Identificadors
+  sup.SystemIdentifier=
+    strings.TrimRight ( string(data[8:40]), " " )
+  sup.VolumeIdentifier=
+    strings.TrimRight ( string(data[40:72]), " " )
+  
+  // Grandàries
+  sup.VolumeSpaceSize= parse_int32_LSB_MSB ( data[80:88] )
+  sup.VolumeSetSize= parse_int16_LSB_MSB ( data[120:124] )
+  sup.VolumeSequenceNumber= parse_int16_LSB_MSB ( data[124:128] )
+  sup.LogicalBlockSize= parse_int16_LSB_MSB ( data[128:132] )
+  if sup.LogicalBlockSize<512 ||
+    sup.LogicalBlockSize>LOGICAL_SECTOR_SIZE ||
+    LOGICAL_SECTOR_SIZE%sup.LogicalBlockSize!=0 {
+    return fmt.Errorf ( "wrong Logical Block Size: %d",
+      sup.LogicalBlockSize )
+  }
+  sup.blocks_per_sec= 
+    LOGICAL_SECTOR_SIZE/int(uint32(sup.LogicalBlockSize))
+
+  // Root directory record
+  copy(sup.root_dir_record[:],data[156:190])
+  
+  // Més identificadors
+  sup.VolumeSetIdentifier=
+    strings.TrimRight ( string(data[190:318]), " " )
+  sup.PublisherIdentifier=
+    strings.TrimRight ( string(data[318:446]), " " )
+  sup.DataPreparerIdentifier=
+    strings.TrimRight ( string(data[446:574]), " " )
+  sup.ApplicationIdentifier=
+    strings.TrimRight ( string(data[574:702]), " " )
+  sup.CopyrightFileIdentifier=
+    strings.TrimRight ( string(data[702:739]), " " )
+  sup.AbstractFileIdentifier=
+    strings.TrimRight ( string(data[739:776]), " " )
+  sup.BiblioFileIdentifier=
+    strings.TrimRight ( string(data[776:813]), " " )
+
+  // Dates
+  parse_date_time ( data[813:830], &sup.VolumeCreation )
+  parse_date_time ( data[830:847], &sup.VolumeModification )
+  parse_date_time ( data[847:864], &sup.VolumeExpiration )
+  parse_date_time ( data[864:881], &sup.VolumeEffective )
+
+  // FileStructureVersion
+  sup.FileStructureVersion= uint8(data[881])
+
+    // Assigna
+  self.Supplementary= &sup
+  
+  return nil
+  
+} // end readSupplementaryVolume
 
 
 func (self *ISO) readDirectory( entry *_ISO_FileEntry ) (*ISO_Directory,error) {
