@@ -26,6 +26,7 @@ package cdread
 import (
   "errors"
   "fmt"
+  "log"
   "io"
   "strings"
 )
@@ -516,11 +517,13 @@ func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
       return fmt.Errorf ( "failed to read volume descriptor at sector %d",
         sector )
     }
-
+    
     // Comprova tipus
     switch dtype:= buf[0]; dtype {
     case 0: // Boot record
-      return fmt.Errorf ( "TODO - BOOT RECORD!!!" )
+      if err:= self.readBootRecord ( buf[:] ); err != nil {
+        return err
+      }
     case 1: // Primary volume (NOTA!! Com a mínim cal 1)
       if num_pv == 0 {
         num_pv= 1
@@ -539,9 +542,9 @@ func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
       return errors.New ( "volume partition descriptor not implemented" )
     case 255:
       end= true
-    default:
-      return fmt.Errorf ( "unknown volume descriptor type: %d", dtype )
-      
+    default: // En cas d'error force aturada
+      log.Printf ( "unknown volume descriptor type: %d", dtype )
+      end= true
     }
     
   }
@@ -552,6 +555,23 @@ func (self *ISO) readVolumeDescriptors( f TrackReader ) error {
   return nil
   
 } // end readVolumeDescriptors
+
+
+func (self *ISO) readBootRecord( data []byte ) error {
+
+  // Signatura - si tot és 0 ignore el record
+  if data[1]==0 && data[2]==0 && data[3]==0 && data[4]==0 && data[5]==0 {
+    return nil
+  }
+  if data[1]!='C' || data[2]!='D' || data[3]!='0' ||
+    data[4]!='0' || data[5]!='1' {
+    return errors.New ( "Volume descriptor signature 'CD001' not "+
+      "found in primary descriptor" )
+  }
+
+  return errors.New ( "TODO - BOOT RECORD" )
+  
+} // end readBootRecord
 
 
 func (self *ISO) readPrimaryVolume( data []byte ) error {
