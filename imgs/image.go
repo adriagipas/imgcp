@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Adrià Giménez Pastor.
+ * Copyright 2022-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -82,6 +82,9 @@ func NewImage(file_name string) (Image,error) {
     
   case TYPE_NCCH:
     return newNCCH_from_filename ( file_name )
+
+  case TYPE_STFS:
+    return newSTFS ( file_name )
     
   default:
     return nil,fmt.Errorf ( "Unable to detect the image type for file '%s'",

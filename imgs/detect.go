@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Adrià Giménez Pastor.
+ * Copyright 2022-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -44,6 +44,7 @@ const TYPE_CD           = 6
 const TYPE_ISO9660      = 7
 const TYPE_CCI          = 8
 const TYPE_NCCH         = 9
+const TYPE_STFS         = 10
 
 
 /************/
@@ -206,6 +207,11 @@ func detect_h512(file_name string) (int,error) {
   if tmp := detect_NCCH ( header, nbytes ); tmp > points {
     ret,points= TYPE_NCCH,tmp
   }
+
+  // --> Citrus STFS
+  if tmp := detect_STFS ( header, nbytes ); tmp > points {
+    ret,points= TYPE_STFS,tmp
+  }
   
   return ret,nil
   
@@ -365,3 +371,21 @@ func detect_NCCH(header []byte, nbytes int64) int {
   return 10
   
 } // detect_NCCH
+
+
+func detect_STFS(header []byte, nbytes int64) int {
+
+  // Magic number
+  if header[0]=='C' && header[1]=='O' && header[2]=='N' && header[3]==' ' {
+    return 100
+  } else if header[0]=='P' && header[1]=='I' && header[2]=='R' &&
+    header[3]=='S' {
+    return 100
+  } else if header[0]=='L' && header[1]=='I' && header[2]=='V' &&
+    header[3]=='E' {
+    return 100
+  } else {
+    return -1
+  }
+  
+} // detect_STFS
