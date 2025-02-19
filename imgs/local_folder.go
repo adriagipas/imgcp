@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -30,6 +30,8 @@ import (
   "io"
   "os"
   "path"
+
+  "github.com/adriagipas/imgcp/utils"
 )
 
 
@@ -134,7 +136,7 @@ func (self *_LocalFolder_Directory) MakeDir(name string) (Directory,error) {
 
 func (self *_LocalFolder_Directory) GetFileWriter(
   name string,
-) (FileWriter,error) {
+) (utils.FileWriter,error) {
 
   new_path := path.Join ( self.dir_name, name )
   f,err := os.OpenFile ( new_path, os.O_RDWR|os.O_CREATE, 0666 )
@@ -180,7 +182,8 @@ func (self *_LocalFolder_DirectoryIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_LocalFolder_DirectoryIter) GetFileReader() (FileReader,error) {
+func (self *_LocalFolder_DirectoryIter) GetFileReader(
+) (utils.FileReader,error) {
 
   path := path.Join ( self.pdir.dir_name, self.entries[self.pos].Name () )
   f,err := os.Open ( path )

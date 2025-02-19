@@ -146,7 +146,7 @@ func (self *_NCCH) MakeDir(name string) (Directory,error) {
 } // end Mkdir
 
 
-func (self *_NCCH) GetFileWriter(name string) (FileWriter,error) {
+func (self *_NCCH) GetFileWriter(name string) (utils.FileWriter,error) {
   return nil,errors.New ( "Writing a file not implemented for NCCH files" )
 }
 
@@ -237,7 +237,7 @@ func (self *_NCCH_DirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_NCCH_DirIter) GetFileReader() (FileReader,error) {
+func (self *_NCCH_DirIter) GetFileReader() (utils.FileReader,error) {
 
   switch self.pos {
     
@@ -366,7 +366,7 @@ func (self *_ExeFS) MakeDir(name string) (Directory,error) {
 } // end Mkdir
 
 
-func (self *_ExeFS) GetFileWriter(name string) (FileWriter,error) {
+func (self *_ExeFS) GetFileWriter(name string) (utils.FileWriter,error) {
   return nil,errors.New (
     "Writing a file not implemented for NCCH.ExeFS files" )
 }
@@ -411,7 +411,7 @@ func (self *_ExeFS_DirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_ExeFS_DirIter) GetFileReader() (FileReader,error) {
+func (self *_ExeFS_DirIter) GetFileReader() (utils.FileReader,error) {
   return self.state.OpenIndex ( self.pos )
 } // end GetFileReader
 
@@ -488,7 +488,7 @@ func (self *_RomFS) MakeDir(name string) (Directory,error) {
 } // end Mkdir
 
 
-func (self *_RomFS) GetFileWriter(name string) (FileWriter,error) {
+func (self *_RomFS) GetFileWriter(name string) (utils.FileWriter,error) {
   return nil,errors.New (
     "Writing a file not implemented for NCCH.RomFS files" )
 } // end GetFileWriter
@@ -554,7 +554,7 @@ func (self *_RomFS_DirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_RomFS_DirIter) GetFileReader() (FileReader,error) {
+func (self *_RomFS_DirIter) GetFileReader() (utils.FileReader,error) {
   if self.parent != nil || self.dirs != nil {
     return nil,errors.New ( "_RomFS_DirIter.GetDirectory: WTF!!!" )
   } else {

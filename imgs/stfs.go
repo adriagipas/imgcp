@@ -113,7 +113,8 @@ func (self *_STFS) PrintInfo( file io.Writer, prefix string ) error {
   P("")
   PrintBytes("Content ID:                           ",
     self.state.Metadata.ContentID[:])
-  F("Entry ID:                              %08x\n",self.state.Metadata.EntryID)
+  F("Header Size:                           %d\n",
+    self.state.Metadata.HeaderSize)
   F("Content Type:                          %s\n",self.state.ContentType())
   F("Metadata Version:                      %d\n",
     self.state.Metadata.MetadataVersion)
@@ -145,6 +146,8 @@ func (self *_STFS) PrintInfo( file io.Writer, prefix string ) error {
     F("Data File Combined Size:               %s\n",
       utils.NumBytesToStr(uint64(self.state.Metadata.DataFileCombSize)))
   }
+  F("Volume Descriptor Type:                %s\n",
+    self.state.DescriptorType())
   PrintBytes("Device ID:                            ",
     self.state.Metadata.DeviceID[:])
   F("Transfer Flags:                        %02x\n",
@@ -199,7 +202,7 @@ func (self *_STFS) MakeDir(name string) (Directory,error) {
 } // end Mkdir
 
 
-func (self *_STFS) GetFileWriter(name string) (FileWriter,error) {
+func (self *_STFS) GetFileWriter(name string) (utils.FileWriter,error) {
   return nil,errors.New ( "Writing a file not implemented for STFS files" )
 }
 
@@ -274,7 +277,14 @@ func (self *_STFS_RootDirIter) End() bool {
 func (self *_STFS_RootDirIter) GetDirectory() (Directory,error) {
 
   if self.current==0 {
-    return nil,errors.New("TODO - _STFS_RootDirIter.GetDirectory()")
+    files,err:= self.state.FileList ()
+    if err != nil { return nil,err }
+    ret:= _STFS_Directory{
+      state: self.state,
+      files: files,
+      dir: -1, // Root
+    }
+    return &ret,nil
   } else {
     return nil,errors.New ( "_STFS_RootDirIter.GetDirectory: WTF!!!" )
   }
@@ -282,7 +292,7 @@ func (self *_STFS_RootDirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_STFS_RootDirIter) GetFileReader() (FileReader,error) {
+func (self *_STFS_RootDirIter) GetFileReader() (utils.FileReader,error) {
 
   switch self.current {
   case 1: // Thumbnail
@@ -372,6 +382,165 @@ func (self *_STFS_RootDirIter) Remove() error {
 
 func (self *_STFS_RootDirIter) Type() int {
   if self.current == 0 {
+    return DIRECTORY_ITER_TYPE_DIR
+  } else {
+    return DIRECTORY_ITER_TYPE_FILE
+  }
+} // end Type
+
+
+/******************/
+/* STFS DIRECTORY */
+/******************/
+
+type _STFS_Directory struct {
+
+  state *x360.STFS
+  files []x360.STFS_FileEntry
+  dir   int
+  
+}
+
+
+func (self *_STFS_Directory) Begin() (DirectoryIter,error) {
+  
+  ret:= _STFS_DirIter{
+    dir: self,
+  }
+  for ret.pos= 0;
+  ret.pos < len(self.files) && self.files[ret.pos].PathIndicator != self.dir;
+  ret.pos++ {
+  }
+  
+  return &ret,nil
+  
+} // end Begin
+
+
+func (self *_STFS_Directory) GetFileWriter(
+  name string,
+) (utils.FileWriter,error) {
+  return nil,errors.New ( "Writing a file not implemented for STFS files" )
+}
+
+
+func (self *_STFS_Directory) MakeDir(name string) (Directory,error) {
+  return nil,errors.New ( "Creation of volumes is not supported" )
+} // end Mkdir
+
+
+/**********************/
+/* STF DIRECTORY ITER */
+/**********************/
+
+type _STFS_DirIter struct {
+  dir *_STFS_Directory
+  pos int
+}
+
+
+func (self *_STFS_DirIter) CompareToName(name string) bool {
+  return !self.End () && name==self.dir.files[self.pos].Name
+} // end CompareToName
+
+
+func (self *_STFS_DirIter) End() bool {
+  return self.pos>=len(self.dir.files)
+} // end End
+
+
+func (self *_STFS_DirIter) GetDirectory() (Directory,error) {
+
+  if !self.End () && self.dir.files[self.pos].IsDirectory {
+    ret:= _STFS_Directory{
+      state: self.dir.state,
+      files: self.dir.files,
+      dir: self.pos,
+    }
+    return &ret,nil
+  } else {
+    return nil,errors.New ( "_STFS_DirIter.GetDirectory: WTF!!!" )
+  }
+  
+} // end GetDirectory
+
+
+func (self *_STFS_DirIter) GetFileReader() (utils.FileReader,error) {
+  
+  if !self.End () && !self.dir.files[self.pos].IsDirectory {
+    file:= &self.dir.files[self.pos]
+    return self.dir.state.Open ( file.StartingBlock, file.NumBlocks,
+      file.Consecutive, file.Size )
+  } else {
+    return nil,errors.New ( "_STFS_DirIter.GetFileReader: WTF!!" )
+  }
+  
+} // end GetFileReader
+
+
+func (self *_STFS_DirIter) GetName() string {
+  return self.dir.files[self.pos].Name
+} // end GetName
+
+
+func (self *_STFS_DirIter) List(file io.Writer) error {
+
+  P := func(args... any) {
+    fmt.Fprint ( file, args... )
+  }
+  F := func(format string,args... any) {
+    fmt.Fprintf ( file, format, args... )
+  }
+
+  entry:= &self.dir.files[self.pos]
+  
+  // Attributs
+  if entry.IsDirectory { P("d") } else { P("-") }
+  
+  P("  ")
+  
+  // Grandària
+  size := utils.NumBytesToStr ( uint64(entry.Size) )
+  for i := 0; i < 10-len(size); i++ {
+    P(" ")
+  }
+  P(size,"  ")
+  
+  // Date
+  F("%s  ",entry.GetUpdateTimestamp())
+  
+  // Nom
+  P(entry.Name)
+  
+  P("\n")
+
+  return nil
+  
+} // end List
+
+
+func (self *_STFS_DirIter) Next() error {
+  
+  if !self.End () {
+    for self.pos++;
+    self.pos < len(self.dir.files) &&
+      self.dir.files[self.pos].PathIndicator != self.dir.dir;
+    self.pos++ {
+    }
+  }
+  
+  return nil
+  
+} // end Next
+
+
+func (self *_STFS_DirIter) Remove() error {
+  return errors.New ( "Remove file not implemented for STFS images" )
+} // end Remove
+
+
+func (self *_STFS_DirIter) Type() int {
+  if self.dir.files[self.pos].IsDirectory {
     return DIRECTORY_ITER_TYPE_DIR
   } else {
     return DIRECTORY_ITER_TYPE_FILE

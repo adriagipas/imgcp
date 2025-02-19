@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Adrià Giménez Pastor.
+ * Copyright 2024-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -128,7 +128,7 @@ func (self *_CCI) MakeDir(name string) (Directory,error) {
 } // end Mkdir
 
 
-func (self *_CCI) GetFileWriter(name string) (FileWriter,error) {
+func (self *_CCI) GetFileWriter(name string) (utils.FileWriter,error) {
   return nil,errors.New ( "Writing a file not implemented for CCI files" )
 }
 
@@ -193,7 +193,7 @@ func (self *_CCI_DirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_CCI_DirIter) GetFileReader() (FileReader,error) {
+func (self *_CCI_DirIter) GetFileReader() (utils.FileReader,error) {
   return nil,errors.New ( "_CCI_DirIter.GetFileReader: WTF!!" )
 } // end GetFileReader
 

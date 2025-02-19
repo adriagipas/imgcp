@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -1122,7 +1122,9 @@ func (self *_FAT1216_Directory) MakeDir(name string) (Directory,error) {
 } // end MakeDir
 
 
-func (self *_FAT1216_Directory) GetFileWriter(name string) (FileWriter,error) {
+func (self *_FAT1216_Directory) GetFileWriter(
+  name string,
+) (utils.FileWriter,error) {
 
   // Obri fitxer
   f,err := os.OpenFile ( self.img.file_name, os.O_RDWR, 0666 )
@@ -1377,7 +1379,7 @@ func (self *_FAT1216_DirectoryIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_FAT1216_DirectoryIter) GetFileReader() (FileReader,error) {
+func (self *_FAT1216_DirectoryIter) GetFileReader() (utils.FileReader,error) {
 
   // Comprovacions
   if self.End() {

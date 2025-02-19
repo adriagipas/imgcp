@@ -31,6 +31,7 @@ import (
   "strings"
   
   "github.com/adriagipas/imgcp/cdread"
+  "github.com/adriagipas/imgcp/utils"
 )
 
 
@@ -196,7 +197,9 @@ func (self *_CD_SessionsDir) MakeDir( name string ) (Directory,error) {
 } // end MakeDir
 
 
-func (self *_CD_SessionsDir) GetFileWriter(name string) (FileWriter,error) {
+func (self *_CD_SessionsDir) GetFileWriter(
+  name string,
+) (utils.FileWriter,error) {
   return nil,errors.New ( "Writing a file not implemented for CD images" )
 } // end GetFileWriter
 
@@ -232,7 +235,7 @@ func (self *_CD_SessionsDirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_CD_SessionsDirIter) GetFileReader() (FileReader,error) {
+func (self *_CD_SessionsDirIter) GetFileReader() (utils.FileReader,error) {
   return nil,errors.New ( "_CD_SessionsDirIter.GetFileReader: WTF!!" )
 } // end GetFileReader
 
@@ -295,7 +298,7 @@ func (self *_CD_TracksDir) MakeDir( name string ) (Directory,error) {
 } // end MakeDir
 
 
-func (self *_CD_TracksDir) GetFileWriter(name string) (FileWriter,error) {
+func (self *_CD_TracksDir) GetFileWriter(name string) (utils.FileWriter,error) {
   return nil,errors.New ( "Make directory not implemented for CD images" )
 } // end GetFileWriter
 
@@ -390,7 +393,7 @@ func (self *_CD_TracksDirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_CD_TracksDirIter) GetFileReader() (FileReader,error) {
+func (self *_CD_TracksDirIter) GetFileReader() (utils.FileReader,error) {
   
   ttype:= self.getTrackType ()
   if ttype == cdread.TRACK_TYPE_AUDIO {

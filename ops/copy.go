@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -242,7 +242,7 @@ type DstFile struct {
   path   *utils.Path
   is_dir bool
   dir    imgs.Directory
-  f      imgs.FileWriter
+  f      utils.FileWriter
 }
 
 func getDstFileCopy(path *utils.Path) (DstFile,error) {
@@ -322,7 +322,7 @@ func getDstFileCopy(path *utils.Path) (DstFile,error) {
 
 const COPY_BUF_SIZE = 1024
 
-func copyFiles(src imgs.FileReader, dst imgs.FileWriter) error {
+func copyFiles(src utils.FileReader, dst utils.FileWriter) error {
   
   // Buffer
   var mem [COPY_BUF_SIZE]byte

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Adrià Giménez Pastor.
+ * Copyright 2022-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -372,7 +372,9 @@ func (self *_MBR_Directory) MakeDir(name string) (Directory,error) {
 } // end Mkdir
 
 
-func (self *_MBR_Directory) GetFileWriter(name string) (FileWriter,error) {
+func (self *_MBR_Directory) GetFileWriter(
+  name string,
+) (utils.FileWriter,error) {
   return nil,errors.New ( "Files cannot be created outside of a partition" )
 }
 
@@ -434,7 +436,7 @@ func (self *_MBR_DirectoryIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_MBR_DirectoryIter) GetFileReader() (FileReader,error) {
+func (self *_MBR_DirectoryIter) GetFileReader() (utils.FileReader,error) {
   return nil,errors.New ( "A partition cannot be accessed as a file" )
 } // end GetFileReader
 

@@ -21,11 +21,13 @@
  *
  */
 
-package imgs;
+package imgs
 
 import (
   "fmt"
   "io"
+
+  "github.com/adriagipas/imgcp/utils"
 )
 
 
@@ -94,37 +96,6 @@ func NewImage(file_name string) (Image,error) {
 } // end NewImage
 
 
-/***************/
-/* FILE READER */
-/***************/
-
-type FileReader interface {
-  
-  // Llig en el buffer. Torna el nombre de bytes llegits. Quan aplega
-  // al final torna 0 i io.EOF.
-  Read(buf []byte) (int,error)
-
-  // Tanca el fitxer.
-  Close() error
-  
-}
-
-
-/***************/
-/* FILE WRITER */
-/***************/
-
-type FileWriter interface {
-
-  // Escriu el buffer. Torna el nombre de bytes escrits .
-  Write(buf []byte) (int,error)
-
-  // Tanca el fitxer
-  Close() error
-  
-}
-
-
 /*************/
 /* DIRECTORY */
 /*************/
@@ -138,7 +109,7 @@ type Directory interface {
   MakeDir(name string) (Directory,error)
 
   // Torna un un FileWriter. Si el fitxer no existeix intenta crear-lo.
-  GetFileWriter(name string) (FileWriter,error)
+  GetFileWriter(name string) (utils.FileWriter,error)
   
 }
 
@@ -168,7 +139,7 @@ type DirectoryIter interface {
 
   // Torna un FileReader del fitxer actual. Intentar cridar a aquest
   // mètode quan no és un fitxer torna un error.
-  GetFileReader() (FileReader,error)
+  GetFileReader() (utils.FileReader,error)
 
   // Torna el nom de l'entrada.
   GetName() string

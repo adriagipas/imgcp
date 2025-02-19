@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Adrià Giménez Pastor.
+ * Copyright 2023-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -288,7 +288,9 @@ func (self *_IFF_Directory) MakeDir(name string) (Directory,error) {
 } // end MakeDir
 
 
-func (self *_IFF_Directory) GetFileWriter(name string) (FileWriter,error) {
+func (self *_IFF_Directory) GetFileWriter(
+  name string,
+) (utils.FileWriter,error) {
   return nil,errors.New ( "Writing a file not implemented for Interchange"+
     " Format Files (IFF)")
 } // end GetFileWriter
@@ -334,7 +336,7 @@ func (self *_IFF_DirectoryIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_IFF_DirectoryIter) GetFileReader() (FileReader,error) {
+func (self *_IFF_DirectoryIter) GetFileReader() (utils.FileReader,error) {
   return utils.NewSubfileReader (
     self.dir.img.file_name,
     self.offset + 8,

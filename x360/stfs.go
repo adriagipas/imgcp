@@ -29,7 +29,8 @@ import (
   "fmt"
   "io"
   "os"
-
+  
+  "github.com/adriagipas/imgcp/utils"
   "golang.org/x/text/encoding"
   "golang.org/x/text/encoding/unicode"
 )
@@ -80,7 +81,7 @@ const (
   PLATFORM_XBOX360 = 0
   PLATFORM_PC = 1
   PLATFORM_UNK = -1
-  
+
 )
 
 const _STFS_HEADER_SIZE = 0x22C
@@ -105,21 +106,10 @@ type STFSHeader struct {
   
 }
 
-type STFSVolumeDescriptor struct {
-
-  BlockSeparation            uint8
-  FileTableBlockCount        int16
-  FileTableBlockNumber       int32
-  TopHashTableHash           [0x14]byte
-  TotalAllocatedBlockCount   int32
-  TotalUnallocatedBlockCount int32
-  
-}
-
 type STFSMetadata struct {
   
   ContentID          [0x14]byte
-  EntryID            uint32
+  HeaderSize         uint32
   ContentType        int
   MetadataVersion    uint32
   ContentSize        int64
@@ -134,9 +124,10 @@ type STFSMetadata struct {
   SaveGameID         uint32
   ConsoleID          [5]byte
   ProfileID          [8]byte
-  Volume             STFSVolumeDescriptor
+  Volume             [0x24]byte
   DataFileCount      int32
   DataFileCombSize   int64
+  DescriptorType     uint32
   DeviceID           [0x14]byte
   DisplayName        [12]string
   DisplayDescription [12]string
@@ -154,11 +145,38 @@ type STFSMetadata struct {
   
 }
 
+type _STFS_FileManager interface {
+
+  Open (
+    block       int32,
+    num_blocks  int32,
+    consecutive bool,
+    size        int32, // <= 0 vol dir que no es sap (tots els blocs)
+  ) (utils.FileReader,error)
+  
+}
+
 type STFS struct {
 
   Header    STFSHeader
   Metadata  STFSMetadata
-  file_name string
+
+  // Privat
+  mng       _STFS_FileManager
+  
+}
+
+type STFS_FileEntry struct {
+
+  Name            string
+  IsDirectory     bool
+  Consecutive     bool // Blocks consecutius
+  StartingBlock   int32
+  NumBlocks       int32
+  Size            int32
+  UpdateDate      [4]byte
+  AccessDate      [4]byte
+  PathIndicator   int
   
 }
 
@@ -190,6 +208,20 @@ func _u64( v []byte ) uint64 {
     (uint64(v[6])<<8) |
     uint64(v[7])
 } // end _u64
+
+
+func _le_s24( v []byte ) int32 {
+
+  tmp:= (uint32(v[2])<<16) |
+    (uint32(v[1])<<8) |
+    uint32(v[0])
+  if tmp&0x800000 != 0 {
+    tmp|= 0xFF000000
+  }
+  
+  return int32(tmp)
+  
+} // end _le_s24
 
 
 func ctype2int( ctype uint32 ) int {
@@ -282,22 +314,6 @@ func _str( dec *encoding.Decoder, data []byte ) (ret string) {
 } // end _str
 
 
-func (self *STFSVolumeDescriptor) Read( v []byte ) {
-
-  self.BlockSeparation= uint8(v[1])
-  self.FileTableBlockCount= int16(_u16(v[2:]))
-  tmp:= (uint32(v[4])<<16) | (uint32(v[5])<<8) | uint32(v[6])
-  if tmp&0x800000 != 0 {
-    tmp|= 0xFF000000
-  }
-  self.FileTableBlockNumber= int32(tmp)
-  copy ( self.TopHashTableHash[:], v[7:27] )
-  self.TotalAllocatedBlockCount= int32(_u32(v[27:]))
-  self.TotalUnallocatedBlockCount= int32(_u32(v[31:]))
-  
-} // STFSVolumeDescriptor.Read
-
-
 func (self *STFSMetadata) Read( fd io.Reader ) error {
   
   // Llig capçalera.
@@ -312,7 +328,7 @@ func (self *STFSMetadata) Read( fd io.Reader ) error {
 
   // Llig camps
   copy ( self.ContentID[:], buf[0x100:0x100+0x14] )
-  self.EntryID= _u32(buf[0x114:])
+  self.HeaderSize= _u32(buf[0x114:])
   self.ContentType= ctype2int ( _u32(buf[0x118:]) )
   self.MetadataVersion= _u32(buf[0x11c:])
   self.ContentSize= int64(_u64(buf[0x120:]))
@@ -339,9 +355,10 @@ func (self *STFSMetadata) Read( fd io.Reader ) error {
       "Error while reading STFS metadata: invalid Volume Descriptor size (%d)",
       uint8(buf[0x14d]) )
   }
-  self.Volume.Read ( buf[0x14e:] )
+  copy ( self.Volume[:], buf[0x14e:0x14e+0x24])
   self.DataFileCount= int32(_u32(buf[0x171:]))
   self.DataFileCombSize= int64(_u64(buf[0x175:]))
+  self.DescriptorType= _u32(buf[0x17d:])
   copy ( self.DeviceID[:], buf[0x1d1:0x1d1+0x14] )
   dec:= unicode.UTF16(unicode.BigEndian,unicode.IgnoreBOM).NewDecoder ()
   for i:= 0; i < 9; i++ {
@@ -448,7 +465,6 @@ func NewSTFS( file_name string ) (*STFS,error) {
 
   // Inicialitza
   ret:= STFS{
-    file_name: file_name,
   }
   
   // Llig capçalera i metadades.
@@ -462,6 +478,20 @@ func NewSTFS( file_name string ) (*STFS,error) {
   }
   if err:= ret.Metadata.Read ( fd ); err != nil {
     return nil,err
+  }
+
+  // File Manager
+  switch ret.Metadata.DescriptorType {
+  case 0: // STFS
+    if ret.mng,err= newStfsFileManager ( file_name, &ret ); err != nil {
+      return nil,err
+    }
+  case 1: // SVOD
+    return nil,errors.New("TODO - SvodFileManager")
+  default:
+    return nil,fmt.Errorf (
+      "Error while reading STFS file '%s': unknown volume descriptor type %02X",
+      file_name, ret.Metadata.DescriptorType )
   }
   
   return &ret,nil
@@ -582,3 +612,112 @@ func (self *STFS) Platform() string {
     return "Unknown"
   }
 } // end STFS.Platform
+
+
+func (self *STFS) DescriptorType() string {
+  switch self.Metadata.DescriptorType {
+  case 0x00:
+    return "STFS"
+  case 0x01:
+    return "SVOD"
+  default:
+    return "Unknown"
+  }
+} // end STFS.DescriptorType
+
+
+func (self *STFS) Open(
+  block       int32,
+  num_blocks  int32,
+  consecutive bool,
+  size        int32, // <= 0 vol dir que no es sap (tots els blocs)
+) (utils.FileReader,error) {
+  return self.mng.Open ( block, num_blocks, consecutive, size )
+} // end STFS.Open
+
+
+func (self *STFS) FileList() ([]STFS_FileEntry,error) {
+
+  // Get file list block
+  block_count:= int32(int16(_u16(self.Metadata.Volume[2:])))
+  tmp:= (uint32(self.Metadata.Volume[4])<<16) |
+    (uint32(self.Metadata.Volume[5])<<8) |
+    uint32(self.Metadata.Volume[6])
+  if tmp&0x800000 != 0 {
+    tmp|= 0xFF000000
+  }
+  block:= int32(tmp)
+  
+  // Obri el fitxer
+  f,err:= self.mng.Open ( block, block_count, false, -1 )
+  if err != nil { return nil, err }
+  defer f.Close ()
+  
+  // Llig
+  var ret []STFS_FileEntry= nil
+  var buf [0x40]byte
+  var file_name_len uint8
+  var nbytes int
+  var err2 error
+  e:= STFS_FileEntry{}
+  for i:= 0; ; i++ {
+    
+    // Llig següent entrada
+    nbytes,err2= f.Read ( buf[:] )
+    if err2 == io.EOF {
+      break
+    } else if err2 != nil {
+      return nil,fmt.Errorf (
+        "Error while reading %dth entry from directory at block %d: %s",
+        i, block, err2 )
+    } else if nbytes!=0x40 {
+      return nil,fmt.Errorf (
+        "Unable to read the %dth entry from directory at block %d",
+        i, block )
+    }
+    
+    // Comprova que no siga el final (tot a 0's). Comprove sols
+    // posicions clau.
+    if buf[0x28]==0 && buf[0]==0 && buf[1]==0 { break }
+    
+    // Descodifica entrada.
+    file_name_len= uint8(buf[0x28])&0x3f
+    if file_name_len > 0x28 { file_name_len= 0x28 }
+    e.Name= string(buf[:file_name_len])
+    e.IsDirectory= (buf[0x28]&0x80)!=0
+    e.Consecutive= (buf[0x28]&0x40)!=0
+    e.PathIndicator= int(int16(_u16(buf[0x32:])))
+    e.Size= int32(_u32(buf[0x34:]))
+    e.StartingBlock= _le_s24(buf[0x2f:])
+    e.NumBlocks= _le_s24(buf[0x29:])
+    copy ( e.UpdateDate[:], buf[0x38:] )
+    copy ( e.AccessDate[:], buf[0x3c:] )
+    
+    // Afegeix
+    ret= append ( ret, e )
+    
+  }
+  
+  return ret,nil
+  
+} // end STFS.FileList
+
+
+func (self *STFS_FileEntry) GetUpdateTimestamp() string {
+
+  // NOTA: Està bé????
+  val:= uint32(self.UpdateDate[3]) |
+    (uint32(self.UpdateDate[2])<<8) |
+    (uint32(self.UpdateDate[1])<<16) |
+    (uint32(self.UpdateDate[0])<<24)
+  ss:= (val&0x1f)*2
+  mm:= int((val>>5)&0x3f)
+  hh:= int((val>>11)&0x1f)
+  day:= int((val>>16)&0x1f)
+  month:= int((val>>21)&0xf)+1
+  year:= (int((val>>25)&0x7f)/*+80*/)%100
+  
+  return fmt.Sprintf ( "%02d/%02d/%02d  %02d:%02d:%02d",
+    day,month,year,hh,mm,ss )
+  
+} // end STFS_FileEntry.GetUpdateTimestamp

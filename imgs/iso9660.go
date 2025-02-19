@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Adrià Giménez Pastor.
+ * Copyright 2023-2025 Adrià Giménez Pastor.
  *
  * This file is part of adriagipas/imgcp.
  *
@@ -201,7 +201,9 @@ func (self *_ISO_9660_Directory) MakeDir(name string) (Directory,error) {
 } // end MakeDir
 
 
-func (self *_ISO_9660_Directory) GetFileWriter(name string) (FileWriter,error) {
+func (self *_ISO_9660_Directory) GetFileWriter(
+  name string,
+) (utils.FileWriter,error) {
   return nil,errors.New ( "Writing a file not implemented for ISO 9660"+
     " image files")
 } // end GetFileWriter
@@ -229,7 +231,7 @@ func (self *_ISO_9660_DirIter) GetDirectory() (Directory,error) {
 } // end GetDirectory
 
 
-func (self *_ISO_9660_DirIter) GetFileReader() (FileReader,error) {
+func (self *_ISO_9660_DirIter) GetFileReader() (utils.FileReader,error) {
   return self.ISO_DirectoryIter.GetFileReader ()
 } // end GetFileReader
 
