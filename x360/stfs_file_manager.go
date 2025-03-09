@@ -105,9 +105,9 @@ func (self *_StfsFileManager) BlockToOffset( block int32 ) int64 {
   // Reajusta block
   var extra_blocks int32
   extra_blocks= (block/170 + 1)*self.blocks_per_hash
-  if block > 170 {
+  if block >= 170 {
     extra_blocks+= (block/(170*170) + 1)*self.blocks_per_hash
-    if block > 170*170 {
+    if block >= 170*170 {
       extra_blocks+= (block/(170*170*170) + 1)*self.blocks_per_hash
     }
   }
